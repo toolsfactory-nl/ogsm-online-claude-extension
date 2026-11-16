@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx mcpb validate manifest.json
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the tag matches manifest.json and package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(node -p "require('./manifest.json').version")
+          package=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$manifest" ] || [ "$tag" != "$package" ]; then
+            echo "Tag v$tag does not match manifest.json ($manifest) / package.json ($package)" >&2
+            exit 1
+          fi
+      - name: Install production dependencies only
+        run: npm ci --omit=dev
+      - name: Pack the extension
+        run: npx --yes @anthropic-ai/mcpb@2.1.2 pack . "ogsm-online-${GITHUB_REF_NAME}.mcpb"
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "ogsm-online-${GITHUB_REF_NAME}.mcpb" \
+            --title "OGSM.online for Claude Desktop ${GITHUB_REF_NAME}" \
+            --generate-notes

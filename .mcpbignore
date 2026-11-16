@@ -1,0 +1,8 @@
+.git/
+.github/
+test/
+scripts/
+*.mcpb
+.mcpbignore
+.gitignore
+.DS_Store

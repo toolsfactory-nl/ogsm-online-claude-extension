@@ -1,0 +1,420 @@
+// Tool definitions: every tool except list_environments and select_environment needs the
+// environment_session that select_environment returned in this conversation.
+
+import { OgsmClient, ApiError } from "./api.js";
+import { EnvironmentNotSelectedError } from "./environments.js";
+
+const SESSION_PARAM = "environment_session";
+
+const sessionSchema = {
+  type: "string",
+  description:
+    "The environment_session returned by select_environment in this conversation, after the user chose the environment.",
+};
+
+const id = (description) => ({ type: "integer", minimum: 1, description });
+const text = (description) => ({ type: "string", description });
+const html = (what) =>
+  text(`${what}, as HTML. An <img> with a base64 data URI as its src is stored as an attachment.`);
+const labels = {
+  type: "array",
+  items: { type: "string" },
+  description: "Label names. Replaces the labels the card has.",
+};
+const date = (what) => ({ type: "string", description: `${what} (YYYY-MM-DD)` });
+
+const MEASURE_PROPS = {
+  target_unit: text("Unit of the measurements, e.g. % or EUR. A sub goal or sub indicator takes the one of its parent."),
+  chart_vertical_min: { type: "number", description: "Lowest value of the chart axis." },
+  aggregation_method: {
+    type: "string",
+    enum: [
+      "sum",
+      "average",
+      "min",
+      "max",
+      "median",
+      "none",
+      "sum_per_quarter",
+      "average_per_quarter",
+      "sum_per_year",
+      "average_per_year",
+    ],
+    description: "How measurements are aggregated. A sub goal or sub indicator takes the one of its parent.",
+  },
+  chart_type: {
+    type: "string",
+    enum: ["individual", "quarter_average", "quarter_sum", "year_average", "year_sum"],
+  },
+};
+
+const CARD_PROPS = {
+  title: text("Title"),
+  description: html("Description"),
+  assignee_id: id("Id of the user to assign (see list_users)."),
+  labels,
+};
+
+const ACTION_PROPS = {
+  title: text("Title"),
+  description: html("Description"),
+  start: date("Start date"),
+  due: date("Due date"),
+  status: text('Status: a status id, name or base list key ("backlog", "todo", "doing", "done"); see list_statuses.'),
+  effort: text("Effort"),
+  added_value: text("Added value"),
+  priority: text("Priority"),
+  budget_time_available: { type: "number", description: "Available time budget" },
+  budget_money_available: { type: "number", description: "Available money budget" },
+  assignee_id: id("Id of the user to assign (see list_users)."),
+  labels,
+};
+
+function schema(properties, required = []) {
+  return {
+    type: "object",
+    properties: { [SESSION_PARAM]: sessionSchema, ...properties },
+    required: [SESSION_PARAM, ...required],
+    additionalProperties: false,
+  };
+}
+
+function pathId(value, name) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) throw new ApiError(`${name} must be a positive integer id`);
+  return number;
+}
+
+// Copies the given keys from args to body when present, renaming via the map.
+function pick(args, keys, rename = {}) {
+  const body = {};
+  for (const key of keys) {
+    if (args[key] !== undefined) body[rename[key] || key] = args[key];
+  }
+  return body;
+}
+
+function requireChanges(body) {
+  if (Object.keys(body).length === 0) throw new ApiError("Nothing to change: pass at least one field to update.");
+  return body;
+}
+
+export function actionBody(args, { create }) {
+  const body = pick(
+    args,
+    [
+      "title",
+      "description",
+      "start",
+      "due",
+      "status",
+      "effort",
+      "added_value",
+      "priority",
+      "budget_time_available",
+      "budget_money_available",
+      "assignee_id",
+      "labels",
+    ],
+    { status: "list", labels: "label_ids" }
+  );
+  if (create) {
+    body.canvas = { id: pathId(args.canvas_id, "canvas_id") };
+    if (args.strategy_id !== undefined) body.strategy = { id: pathId(args.strategy_id, "strategy_id") };
+    return { ogsm_action: body };
+  }
+  return { ogsm_action: requireChanges(body) };
+}
+
+// kind: objective | goal | strategy | indicator
+export function cardBody(kind, args, { create }) {
+  const measured = kind === "goal" || kind === "indicator";
+  const keys = ["title", "description", "assignee_id", "labels"];
+  if (measured) keys.push(...Object.keys(MEASURE_PROPS));
+  const body = pick(args, keys, { labels: "label_ids" });
+  if (create) {
+    body.canvas = { id: pathId(args.canvas_id, "canvas_id") };
+    if ((kind === "goal" || kind === "indicator") && args.parent_id !== undefined) {
+      body.parent = { id: pathId(args.parent_id, "parent_id") };
+    }
+    return { [`ogsm_${kind}`]: body };
+  }
+  return { [`ogsm_${kind}`]: requireChanges(body) };
+}
+
+function onCanvas(records, canvasId) {
+  if (canvasId === undefined) return records;
+  const wanted = pathId(canvasId, "canvas_id");
+  return records.filter((r) => (r.ogsm_canvases || []).some((c) => c.id === wanted));
+}
+
+const an = (kind) => (/^[aeiou]/.test(kind) ? `an ${kind}` : `a ${kind}`);
+
+const PLURAL = { objective: "objectives", goal: "goals", strategy: "strategies", indicator: "indicators" };
+
+function cardTools(kind) {
+  const plural = PLURAL[kind];
+  const measured = kind === "goal" || kind === "indicator";
+  const props = measured ? { ...CARD_PROPS, ...MEASURE_PROPS } : CARD_PROPS;
+  const createProps = { canvas_id: id(`Id of the canvas (OGSM) the ${kind} belongs to.`), ...props };
+  const createRequired = ["canvas_id", "title"];
+  let placement = `An ${kind} stands on the OGSM itself and takes no parent.`;
+  if (kind === "goal") {
+    createProps.parent_id = id("Optional id of a goal on the same canvas, to make this a sub goal.");
+    placement = "Pass parent_id (a goal on the same canvas) to make it a sub goal.";
+  } else if (kind === "indicator") {
+    createProps.parent_id = id(
+      "Id of a strategy on the same canvas, or of an indicator there to make this a sub indicator."
+    );
+    createRequired.push("parent_id");
+    placement = "parent_id is required: a strategy on the same canvas, or an indicator there for a sub indicator.";
+  } else if (kind === "strategy") {
+    placement = "A strategy stands on the OGSM itself and takes no parent.";
+  }
+  return [
+    {
+      name: `list_${plural}`,
+      description: `List the ${plural} visible to the user, optionally only those on one canvas.`,
+      annotations: { readOnlyHint: true },
+      inputSchema: schema({ canvas_id: id("Only return records on this canvas.") }),
+      run: async (client, args) => onCanvas(await client.getAll(`${plural}.json`), args.canvas_id),
+    },
+    {
+      name: `create_${kind}`,
+      description: `Create ${an(kind)} on a canvas. ${placement} Needs a read and write token.`,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      inputSchema: schema(createProps, createRequired),
+      run: (client, args) => client.post(`${plural}.json`, cardBody(kind, args, { create: true })),
+    },
+    {
+      name: `update_${kind}`,
+      description: `Update ${an(kind)}. Only the fields passed are changed. Needs a read and write token.`,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      inputSchema: schema({ [`${kind}_id`]: id(`Id of the ${kind}.`), ...props }, [`${kind}_id`]),
+      run: (client, args) =>
+        client.patch(`${plural}/${pathId(args[`${kind}_id`], `${kind}_id`)}.json`, cardBody(kind, args, { create: false })),
+    },
+  ];
+}
+
+function reportTools(kind) {
+  return {
+    name: `list_${kind}_reports`,
+    description: `List the measurements (reports) of ${kind}s, optionally of one ${kind}.`,
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({ [`${kind}_id`]: id(`Only return reports of this ${kind}.`) }),
+    run: async (client, args) => {
+      const records = await client.getAll(`${kind}_reports.json`);
+      if (args[`${kind}_id`] === undefined) return records;
+      const wanted = pathId(args[`${kind}_id`], `${kind}_id`);
+      return records.filter((r) => r[kind]?.id === wanted);
+    },
+  };
+}
+
+export const API_TOOLS = [
+  {
+    name: "list_canvases",
+    description: "List the OGSM canvases the user can see, with their team id and status.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({}),
+    run: (client) => client.getAll("ogsm_canvases.json"),
+  },
+  {
+    name: "list_teams",
+    description: "List the teams the user belongs to.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({}),
+    run: (client) => client.getAll("teams.json"),
+  },
+  {
+    name: "list_users",
+    description: "List the users in the user's teams (id, name, email address), e.g. to find an assignee id.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({}),
+    run: (client) => client.getAll("users.json"),
+  },
+  {
+    name: "list_statuses",
+    description: "List the statuses an action can have, in board column order.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({}),
+    run: (client) => client.getAll("statuses.json"),
+  },
+  {
+    name: "list_actions",
+    description: "List the actions on a canvas.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({ canvas_id: id("Id of the canvas (see list_canvases).") }, ["canvas_id"]),
+    run: (client, args) => client.getAll("actions.json", { canvas_id: pathId(args.canvas_id, "canvas_id") }),
+  },
+  {
+    name: "create_action",
+    description:
+      "Create an action on a canvas, optionally under a strategy (or under another action). Needs a read and write token.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: schema(
+      {
+        canvas_id: id("Id of the canvas the action belongs to."),
+        strategy_id: id("Optional id of a strategy on that canvas, or of an action there to make this an underlying action."),
+        ...ACTION_PROPS,
+      },
+      ["canvas_id", "title"]
+    ),
+    run: (client, args) => client.post("actions.json", actionBody(args, { create: true })),
+  },
+  {
+    name: "update_action",
+    description: "Update an action. Only the fields passed are changed. Needs a read and write token.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: schema({ action_id: id("Id of the action."), ...ACTION_PROPS }, ["action_id"]),
+    run: (client, args) =>
+      client.patch(`actions/${pathId(args.action_id, "action_id")}.json`, actionBody(args, { create: false })),
+  },
+  {
+    name: "list_comments",
+    description: "List the comments on an action.",
+    annotations: { readOnlyHint: true },
+    inputSchema: schema({ action_id: id("Id of the action.") }, ["action_id"]),
+    run: (client, args) => client.getAll(`actions/${pathId(args.action_id, "action_id")}/comments.json`),
+  },
+  {
+    name: "create_comment",
+    description: "Add a comment to an action. Needs a read and write token.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: schema({ action_id: id("Id of the action."), content: html("Comment") }, ["action_id", "content"]),
+    run: (client, args) =>
+      client.post(`actions/${pathId(args.action_id, "action_id")}/comments.json`, {
+        comment: { content: args.content },
+      }),
+  },
+  {
+    name: "update_comment",
+    description: "Change the content of a comment on an action. Needs a read and write token.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: schema(
+      { action_id: id("Id of the action."), comment_id: id("Id of the comment."), content: html("Comment") },
+      ["action_id", "comment_id", "content"]
+    ),
+    run: (client, args) =>
+      client.patch(
+        `actions/${pathId(args.action_id, "action_id")}/comments/${pathId(args.comment_id, "comment_id")}.json`,
+        { comment: { content: args.content } }
+      ),
+  },
+  {
+    name: "delete_comment",
+    description: "Delete one of the user's own comments on an action. Needs a read and write token.",
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: schema({ action_id: id("Id of the action."), comment_id: id("Id of the comment.") }, [
+      "action_id",
+      "comment_id",
+    ]),
+    run: async (client, args) => {
+      const commentId = pathId(args.comment_id, "comment_id");
+      const result = await client.delete(`actions/${pathId(args.action_id, "action_id")}/comments/${commentId}.json`);
+      return result ?? { deleted: commentId };
+    },
+  },
+  ...cardTools("objective"),
+  ...cardTools("goal"),
+  ...cardTools("strategy"),
+  ...cardTools("indicator"),
+  reportTools("goal"),
+  reportTools("indicator"),
+];
+
+export const SERVER_INSTRUCTIONS = `This server works with OGSM.online environments (tenants). Before any other tool, in every
+conversation: call list_environments, then ASK THE USER which environment to work in, even when only one
+is configured, and wait for their answer. Only then call select_environment with the host they chose, and
+pass the environment_session it returns to every other tool. Never choose an environment yourself, never
+reuse an environment_session from another conversation, and to switch environments ask the user and call
+select_environment again. Mention the environment when you report results or make changes.`;
+
+const GATE_TOOLS = [
+  {
+    name: "list_environments",
+    description:
+      "List the OGSM.online environments configured in the extension settings (host names only). Call this first, " +
+      "then ask the user which one to work in, even if there is only one.",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "select_environment",
+    description:
+      "Select the OGSM.online environment the user explicitly chose for this conversation. Only call this with the " +
+      "host the user named in answer to your question; never pick one yourself, even if only one is configured. " +
+      "Returns an environment_session to pass to every other tool. Call again (after asking) to switch.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: "object",
+      properties: { host: text("The host the user chose, exactly as listed by list_environments.") },
+      required: ["host"],
+      additionalProperties: false,
+    },
+  },
+];
+
+export function toolList() {
+  return [...GATE_TOOLS, ...API_TOOLS].map(({ name, description, inputSchema, annotations }) => ({
+    name,
+    description,
+    inputSchema,
+    annotations,
+  }));
+}
+
+function ok(value) {
+  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+}
+
+function fail(message) {
+  return { content: [{ type: "text", text: message }], isError: true };
+}
+
+// Dispatches one tool call. `confirm(host, names)` may ask the user directly (MCP elicitation)
+// and resolves to the host the user picked, or null when they declined.
+export async function callTool(name, args = {}, { gate, problems = [], fetch, confirm } = {}) {
+  args = args || {};
+  try {
+    if (name === "list_environments") {
+      return ok({
+        environments: gate.names(),
+        ...(problems.length ? { configuration_problems: problems } : {}),
+        next_step:
+          gate.names().length === 0
+            ? "No environment is configured. Ask the user to add a host and personal API token in the extension settings."
+            : "Ask the user which of these environments to work in, then call select_environment with their answer.",
+      });
+    }
+    if (name === "select_environment") {
+      let host = args.host;
+      const environment = gate.find(host);
+      // Where the client supports it, the user picks the environment in a form shown by the client
+      // itself, so the choice does not rest on the model alone.
+      if (environment && confirm) {
+        const chosen = await confirm(environment.host, gate.names());
+        if (!chosen) {
+          return fail(`The user did not choose an environment. Ask the user which environment to work in.`);
+        }
+        host = chosen;
+      }
+      const { key, environment: selected } = gate.select(host);
+      return ok({
+        environment: selected.host,
+        [SESSION_PARAM]: key,
+        note: "Pass this environment_session to every other tool in this conversation. To switch, ask the user and call select_environment again.",
+      });
+    }
+    const tool = API_TOOLS.find((t) => t.name === name);
+    if (!tool) return fail(`Unknown tool: ${name}`);
+    const environment = gate.require(args[SESSION_PARAM]);
+    const client = new OgsmClient(environment, fetch ? { fetch } : {});
+    const data = await tool.run(client, args);
+    return ok({ environment: environment.host, data });
+  } catch (error) {
+    if (error instanceof EnvironmentNotSelectedError || error instanceof ApiError) return fail(error.message);
+    return fail(`Unexpected error: ${error.message}`);
+  }
+}

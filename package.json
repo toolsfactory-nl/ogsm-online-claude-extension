@@ -1,0 +1,29 @@
+{
+  "name": "ogsm-online-claude-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Desktop Extension (MCPB) for the OGSM.online API v3",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "sync-tools": "node scripts/sync-manifest-tools.js",
+    "validate": "mcpb validate manifest.json",
+    "pack": "mcpb pack . ogsm-online.mcpb"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toolsfactory-nl/ogsm-online-claude-extension.git"
+  },
+  "author": "Toolsfactory",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2"
+  }
+}

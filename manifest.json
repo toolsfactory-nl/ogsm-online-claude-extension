@@ -1,0 +1,315 @@
+{
+  "manifest_version": "0.3",
+  "name": "ogsm-online",
+  "display_name": "OGSM.online",
+  "version": "0.1.0",
+  "description": "Work with your OGSM.online plans, actions and comments from Claude, in the environment you choose.",
+  "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure one or more OGSM.online environments (host + personal API token). In every conversation Claude first asks which environment to work in; no tool works until you have chosen one. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies and indicators.",
+  "author": {
+    "name": "Toolsfactory",
+    "url": "https://ogsm.online"
+  },
+  "homepage": "https://ogsm.online",
+  "documentation": "https://github.com/toolsfactory-nl/ogsm-online-claude-extension#readme",
+  "support": "https://github.com/toolsfactory-nl/ogsm-online-claude-extension/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toolsfactory-nl/ogsm-online-claude-extension"
+  },
+  "license": "ISC",
+  "keywords": [
+    "ogsm",
+    "strategy",
+    "okr",
+    "planning",
+    "toolsfactory"
+  ],
+  "privacy_policies": [
+    "https://toolsfactory.nl/privacyverklaring/"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "OGSM_ENV_1_HOST": "${user_config.env_1_host}",
+        "OGSM_ENV_1_TOKEN": "${user_config.env_1_token}",
+        "OGSM_ENV_2_HOST": "${user_config.env_2_host}",
+        "OGSM_ENV_2_TOKEN": "${user_config.env_2_token}",
+        "OGSM_ENV_3_HOST": "${user_config.env_3_host}",
+        "OGSM_ENV_3_TOKEN": "${user_config.env_3_token}",
+        "OGSM_ENV_4_HOST": "${user_config.env_4_host}",
+        "OGSM_ENV_4_TOKEN": "${user_config.env_4_token}",
+        "OGSM_ENV_5_HOST": "${user_config.env_5_host}",
+        "OGSM_ENV_5_TOKEN": "${user_config.env_5_token}",
+        "OGSM_ENV_6_HOST": "${user_config.env_6_host}",
+        "OGSM_ENV_6_TOKEN": "${user_config.env_6_token}",
+        "OGSM_ENV_7_HOST": "${user_config.env_7_host}",
+        "OGSM_ENV_7_TOKEN": "${user_config.env_7_token}",
+        "OGSM_ENV_8_HOST": "${user_config.env_8_host}",
+        "OGSM_ENV_8_TOKEN": "${user_config.env_8_token}",
+        "OGSM_ENV_9_HOST": "${user_config.env_9_host}",
+        "OGSM_ENV_9_TOKEN": "${user_config.env_9_token}",
+        "OGSM_ENV_10_HOST": "${user_config.env_10_host}",
+        "OGSM_ENV_10_TOKEN": "${user_config.env_10_token}"
+      }
+    }
+  },
+  "tools_generated": false,
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "user_config": {
+    "env_1_host": {
+      "type": "string",
+      "title": "Environment 1: host",
+      "description": "OGSM.online environment, e.g. klant.ogsm.online or a dedicated server such as example.ogsm.online.",
+      "required": true
+    },
+    "env_1_token": {
+      "type": "string",
+      "title": "Environment 1: personal API token",
+      "description": "Personal API token for this host (My settings → Personal API tokens). Read only tokens can only read.",
+      "sensitive": true,
+      "required": true
+    },
+    "env_2_host": {
+      "type": "string",
+      "title": "Environment 2: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_2_token": {
+      "type": "string",
+      "title": "Environment 2: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_3_host": {
+      "type": "string",
+      "title": "Environment 3: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_3_token": {
+      "type": "string",
+      "title": "Environment 3: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_4_host": {
+      "type": "string",
+      "title": "Environment 4: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_4_token": {
+      "type": "string",
+      "title": "Environment 4: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_5_host": {
+      "type": "string",
+      "title": "Environment 5: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_5_token": {
+      "type": "string",
+      "title": "Environment 5: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_6_host": {
+      "type": "string",
+      "title": "Environment 6: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_6_token": {
+      "type": "string",
+      "title": "Environment 6: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_7_host": {
+      "type": "string",
+      "title": "Environment 7: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_7_token": {
+      "type": "string",
+      "title": "Environment 7: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_8_host": {
+      "type": "string",
+      "title": "Environment 8: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_8_token": {
+      "type": "string",
+      "title": "Environment 8: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_9_host": {
+      "type": "string",
+      "title": "Environment 9: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_9_token": {
+      "type": "string",
+      "title": "Environment 9: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    },
+    "env_10_host": {
+      "type": "string",
+      "title": "Environment 10: host",
+      "description": "Optional. Another OGSM.online host.",
+      "required": false
+    },
+    "env_10_token": {
+      "type": "string",
+      "title": "Environment 10: personal API token",
+      "description": "Personal API token for the host above.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools": [
+    {
+      "name": "list_environments",
+      "description": "List the OGSM.online environments configured in the extension settings (host names only). Call this first, then ask the user which one to work in, even if there is only one."
+    },
+    {
+      "name": "select_environment",
+      "description": "Select the OGSM.online environment the user explicitly chose for this conversation. Only call this with the host the user named in answer to your question; never pick one yourself, even if only one is configured. Returns an environment_session to pass to every other tool. Call again (after asking) to switch."
+    },
+    {
+      "name": "list_canvases",
+      "description": "List the OGSM canvases the user can see, with their team id and status."
+    },
+    {
+      "name": "list_teams",
+      "description": "List the teams the user belongs to."
+    },
+    {
+      "name": "list_users",
+      "description": "List the users in the user's teams (id, name, email address), e.g. to find an assignee id."
+    },
+    {
+      "name": "list_statuses",
+      "description": "List the statuses an action can have, in board column order."
+    },
+    {
+      "name": "list_actions",
+      "description": "List the actions on a canvas."
+    },
+    {
+      "name": "create_action",
+      "description": "Create an action on a canvas, optionally under a strategy (or under another action). Needs a read and write token."
+    },
+    {
+      "name": "update_action",
+      "description": "Update an action. Only the fields passed are changed. Needs a read and write token."
+    },
+    {
+      "name": "list_comments",
+      "description": "List the comments on an action."
+    },
+    {
+      "name": "create_comment",
+      "description": "Add a comment to an action. Needs a read and write token."
+    },
+    {
+      "name": "update_comment",
+      "description": "Change the content of a comment on an action. Needs a read and write token."
+    },
+    {
+      "name": "delete_comment",
+      "description": "Delete one of the user's own comments on an action. Needs a read and write token."
+    },
+    {
+      "name": "list_objectives",
+      "description": "List the objectives visible to the user, optionally only those on one canvas."
+    },
+    {
+      "name": "create_objective",
+      "description": "Create an objective on a canvas. An objective stands on the OGSM itself and takes no parent. Needs a read and write token."
+    },
+    {
+      "name": "update_objective",
+      "description": "Update an objective. Only the fields passed are changed. Needs a read and write token."
+    },
+    {
+      "name": "list_goals",
+      "description": "List the goals visible to the user, optionally only those on one canvas."
+    },
+    {
+      "name": "create_goal",
+      "description": "Create a goal on a canvas. Pass parent_id (a goal on the same canvas) to make it a sub goal. Needs a read and write token."
+    },
+    {
+      "name": "update_goal",
+      "description": "Update a goal. Only the fields passed are changed. Needs a read and write token."
+    },
+    {
+      "name": "list_strategies",
+      "description": "List the strategies visible to the user, optionally only those on one canvas."
+    },
+    {
+      "name": "create_strategy",
+      "description": "Create a strategy on a canvas. A strategy stands on the OGSM itself and takes no parent. Needs a read and write token."
+    },
+    {
+      "name": "update_strategy",
+      "description": "Update a strategy. Only the fields passed are changed. Needs a read and write token."
+    },
+    {
+      "name": "list_indicators",
+      "description": "List the indicators visible to the user, optionally only those on one canvas."
+    },
+    {
+      "name": "create_indicator",
+      "description": "Create an indicator on a canvas. parent_id is required: a strategy on the same canvas, or an indicator there for a sub indicator. Needs a read and write token."
+    },
+    {
+      "name": "update_indicator",
+      "description": "Update an indicator. Only the fields passed are changed. Needs a read and write token."
+    },
+    {
+      "name": "list_goal_reports",
+      "description": "List the measurements (reports) of goals, optionally of one goal."
+    },
+    {
+      "name": "list_indicator_reports",
+      "description": "List the measurements (reports) of indicators, optionally of one indicator."
+    }
+  ]
+}
