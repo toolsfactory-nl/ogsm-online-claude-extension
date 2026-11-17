@@ -13,8 +13,14 @@ comments and measurements.
    [Releases](https://github.com/toolsfactory-nl/ogsm-online-claude-extension/releases).
 2. Open the file (double-click it, or drag it onto Claude Desktop), or go to
    **Settings → Extensions** in Claude Desktop and install it from there.
-3. Fill in at least one environment in the extension settings (see below) and
-   enable the extension.
+3. Fill in at least one environment in the extension settings (see below).
+4. Check that the extension is enabled. Claude Desktop may leave it disabled
+   after installing; switch it on under **Settings → Extensions** (called
+   **Connectors** in some versions).
+
+The extension needs a recent Claude Desktop that supports MCP *elicitation*
+(the picker in which you choose the environment). With an older version Claude
+tells you to update Claude Desktop first.
 
 Claude Desktop runs the extension with its built-in Node.js; nothing else needs
 to be installed.
@@ -47,23 +53,32 @@ The extension settings have 10 slots, each a pair of:
 
 Fill as many slots as you need and leave the rest empty. Slot 1 is required.
 
+## One environment per conversation
+
+A conversation is about one environment. At the start, Claude Desktop shows you
+a picker with your configured environments (no default) and you choose one.
+Claude then works in that environment for the whole conversation. To work in
+another environment, **start a new conversation** (a new chat).
+
 ## Security model
 
-- **You choose the environment, every conversation.** Before Claude does
-  anything, it lists the configured environments (host names only, never
-  tokens) and asks you which one to work in, even when only one is configured.
-  This is enforced by the extension itself, not only by instructions to Claude:
-  - every tool other than `list_environments` and `select_environment` refuses
-    to run until an environment is selected;
+- **You choose the environment, and Claude never sees the others.** The list of
+  configured hosts is only shown to you, in the picker of Claude Desktop itself
+  (MCP elicitation). Claude only learns the environment you chose. There is no
+  tool that lists environments, and no tool output names another one. This is
+  enforced by the extension itself, not only by instructions to Claude:
+  - every tool other than `select_environment` refuses to run until an
+    environment is selected;
+  - `select_environment` takes no host from Claude; it always asks you, even
+    when only one environment is configured, and never picks one itself. If
+    Claude Desktop cannot show the picker, it refuses and asks you to update
+    Claude Desktop;
   - `select_environment` hands out a random `environment_session` that is bound
     to the chosen environment and that every other tool must pass. It only
     exists in the conversation where you made the choice, so a new conversation
     has to choose again, and an idle selection expires after 12 hours;
-  - switching to another environment takes a new, explicit `select_environment`;
-  - the extension never picks an environment automatically;
-  - where Claude Desktop supports MCP *elicitation*, the extension also shows
-    you a picker with the configured environments (no default) and uses your
-    choice, not Claude's.
+  - while the conversation's `environment_session` is valid, `select_environment`
+    refuses a second selection and says to start a new conversation.
 - **Read versus write.** Use a *Read only* token when Claude only needs to look
   things up. Any change with a read only token is refused by OGSM.online with
   `read_only_token`, and Claude tells you so.
@@ -75,7 +90,7 @@ Fill as many slots as you need and leave the rest empty. Slot 1 is required.
 
 | Tool | What it does |
 | --- | --- |
-| `list_environments`, `select_environment` | Show the configured hosts; select the one you chose |
+| `select_environment` | Let you choose the environment for this conversation |
 | `list_canvases`, `list_teams`, `list_users`, `list_statuses` | Read canvases, teams, users and action statuses |
 | `list_actions`, `create_action`, `update_action` | Actions on a canvas |
 | `list_comments`, `create_comment`, `update_comment`, `delete_comment` | Comments on an action |
@@ -127,7 +142,14 @@ metingen.
 2. Open het bestand (dubbelklikken, of naar Claude Desktop slepen), of installeer
    het via **Instellingen → Extensies** in Claude Desktop.
 3. Vul in de instellingen van de extensie minstens één omgeving in (zie
-   hieronder) en zet de extensie aan.
+   hieronder).
+4. Controleer of de extensie aanstaat. Claude Desktop kan haar na het
+   installeren uitgeschakeld laten; zet haar aan via **Instellingen →
+   Extensies** (in sommige versies **Connectors**).
+
+De extensie heeft een recente Claude Desktop nodig die MCP-*elicitation*
+ondersteunt (de keuzelijst waarin je de omgeving kiest). Met een oudere versie
+vraagt Claude je eerst Claude Desktop bij te werken.
 
 Claude Desktop draait de extensie met de ingebouwde Node.js; je hoeft verder
 niets te installeren.
@@ -160,23 +182,34 @@ De instellingen van de extensie hebben 10 plekken, elk een paar van:
 
 Vul zoveel plekken in als je nodig hebt en laat de rest leeg. Plek 1 is verplicht.
 
+### Eén omgeving per gesprek
+
+Een gesprek gaat over één omgeving. Aan het begin toont Claude Desktop je een
+keuzelijst met je ingestelde omgevingen (zonder standaardwaarde) en kies je er
+één. Claude werkt daarna het hele gesprek in die omgeving. Wil je in een andere
+omgeving werken, **begin dan een nieuw gesprek** (een nieuwe chat).
+
 ### Beveiliging
 
-- **Jij kiest de omgeving, in elk gesprek.** Voordat Claude iets doet, toont
-  het de ingestelde omgevingen (alleen hostnamen, nooit tokens) en vraagt het
-  in welke omgeving je wilt werken, ook als er maar één is ingesteld. De
-  extensie dwingt dat zelf af, niet alleen via instructies aan Claude:
-  - elke tool behalve `list_environments` en `select_environment` weigert
-    totdat er een omgeving is gekozen;
+- **Jij kiest de omgeving, en Claude ziet de andere niet.** De lijst met
+  ingestelde hosts zie alleen jij, in de keuzelijst van Claude Desktop zelf
+  (MCP-elicitation). Claude krijgt alleen de omgeving te horen die jij koos. Er
+  is geen tool die omgevingen opsomt, en geen uitvoer van een tool noemt een
+  andere omgeving. De extensie dwingt dat zelf af, niet alleen via instructies
+  aan Claude:
+  - elke tool behalve `select_environment` weigert totdat er een omgeving is
+    gekozen;
+  - `select_environment` krijgt geen host van Claude; het vraagt het altijd aan
+    jou, ook als er maar één omgeving is ingesteld, en kiest nooit zelf. Kan
+    Claude Desktop de keuzelijst niet tonen, dan weigert het en vraagt het je
+    Claude Desktop bij te werken;
   - `select_environment` geeft een willekeurige `environment_session` die aan
     de gekozen omgeving vastzit en die elke andere tool moet meegeven. Die
     bestaat alleen in het gesprek waarin je de keuze maakte, dus in een nieuw
     gesprek kies je opnieuw; na 12 uur zonder gebruik vervalt de keuze;
-  - wisselen van omgeving vraagt een nieuwe, expliciete `select_environment`;
-  - de extensie kiest nooit zelf een omgeving;
-  - als Claude Desktop MCP-*elicitation* ondersteunt, toont de extensie je ook
-    een keuzelijst met de ingestelde omgevingen (zonder standaardwaarde) en
-    gebruikt jouw keuze, niet die van Claude.
+  - zolang de `environment_session` van het gesprek geldig is, weigert
+    `select_environment` een tweede keuze en zegt het dat je een nieuw gesprek
+    moet beginnen.
 - **Lezen tegenover wijzigen.** Gebruik een token met *Alleen lezen* als Claude
   alleen hoeft op te zoeken. Een wijziging met zo'n token weigert OGSM.online
   met `read_only_token`, en Claude laat je dat weten.

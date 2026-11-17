@@ -18,14 +18,16 @@ export function createServer({ env = process.env, fetch } = {}) {
     { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS }
   );
 
-  // Asks the user in a form of the client itself when it supports MCP elicitation. There is
-  // deliberately no default, so the user always makes the choice, even with one environment.
-  async function confirm(host, names) {
-    if (!server.getClientCapabilities()?.elicitation) return host;
+  // The user picks the environment in a form shown by the client itself (MCP elicitation), so
+  // Claude never sees the configured hosts and cannot choose one. There is deliberately no
+  // default, so the user always makes the choice, even with one environment.
+  // Resolves to { host } or { problem: "unsupported" | "declined" | "failed" }.
+  async function pick(names) {
+    if (!server.getClientCapabilities()?.elicitation) return { problem: "unsupported" };
     let result;
     try {
       result = await server.elicitInput({
-        message: `In which OGSM.online environment should Claude work? Claude proposed ${host}.`,
+        message: "In which OGSM.online environment should Claude work in this conversation?",
         requestedSchema: {
           type: "object",
           properties: {
@@ -35,16 +37,17 @@ export function createServer({ env = process.env, fetch } = {}) {
         },
       });
     } catch (error) {
-      console.error(`[ogsm-online] elicitation failed, relying on Claude asking: ${error.message}`);
-      return host;
+      console.error(`[ogsm-online] elicitation failed: ${error.message}`);
+      return { problem: "failed" };
     }
-    if (result.action !== "accept") return null;
-    return names.includes(result.content?.environment) ? result.content.environment : null;
+    if (result.action !== "accept") return { problem: "declined" };
+    const host = result.content?.environment;
+    return names.includes(host) ? { host } : { problem: "declined" };
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolList() }));
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    callTool(request.params.name, request.params.arguments, { gate, problems, fetch, confirm })
+    callTool(request.params.name, request.params.arguments, { gate, fetch, pick })
   );
   return server;
 }
