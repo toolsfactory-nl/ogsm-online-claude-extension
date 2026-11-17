@@ -24,11 +24,22 @@ function recordingFetch() {
   return { fetch, calls };
 }
 
-async function connect({ env = ENV, elicit } = {}) {
+// By default the client supports elicitation and the user picks `choose`.
+async function connect({ env = ENV, choose = "klant.ogsm.online", elicit, elicitation = true } = {}) {
   const { fetch, calls } = recordingFetch();
   const server = createServer({ env, fetch });
-  const client = new Client({ name: "test", version: "0" }, { capabilities: elicit ? { elicitation: {} } : {} });
-  if (elicit) client.setRequestHandler(ElicitRequestSchema, elicit);
+  const client = new Client({ name: "test", version: "0" }, { capabilities: elicitation ? { elicitation: {} } : {} });
+  const asked = [];
+  if (elicitation) {
+    client.setRequestHandler(
+      ElicitRequestSchema,
+      elicit ||
+        (async (request) => {
+          asked.push(request.params);
+          return { action: "accept", content: { environment: choose } };
+        })
+    );
+  }
   const [a, b] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(a), client.connect(b)]);
   const call = async (name, args = {}) => {
@@ -36,19 +47,124 @@ async function connect({ env = ENV, elicit } = {}) {
     const text = result.content[0].text;
     return { isError: !!result.isError, text, json: result.isError ? undefined : JSON.parse(text) };
   };
-  return { client, call, calls };
+  const select = async () => (await call("select_environment", { environment_session: null })).json.environment_session;
+  return { client, call, calls, asked, select };
 }
 
-test("server instructions tell Claude to ask for the environment", async () => {
+const OTHER_HOST = "example.ogsm.online";
+
+test("instructions keep Claude in the one selected environment", async () => {
   const { client } = await connect();
-  assert.match(client.getInstructions(), /ASK THE USER which environment/);
+  const instructions = client.getInstructions();
+  assert.match(instructions, /one OGSM.online environment per conversation/);
+  assert.match(instructions, /Never mention, suggest,\s+guess or compare any other environment/);
+  assert.match(instructions, /start a new\s+conversation/);
+  assert.doesNotMatch(instructions, /switch/i);
 });
 
-test("list_environments shows host names only, never tokens", async () => {
+test("there is no tool that lists environments, and no tool text names a host or offers switching", async () => {
+  const { client } = await connect();
+  const { tools } = await client.listTools();
+  const names = tools.map((t) => t.name);
+  assert.ok(!names.includes("list_environments"));
+  assert.ok(names.includes("select_environment"));
+  const published = JSON.stringify(tools) + client.getInstructions();
+  assert.ok(!published.includes("klant.ogsm.online") && !published.includes(OTHER_HOST));
+  assert.doesNotMatch(published, /switch|list_environments|environments configured|configured environments/i);
+});
+
+test("select_environment takes no host from Claude", async () => {
+  const { client, call } = await connect();
+  const { tools } = await client.listTools();
+  const select = tools.find((t) => t.name === "select_environment");
+  assert.deepEqual(Object.keys(select.inputSchema.properties), ["environment_session"]);
+  const result = await call("select_environment", { environment_session: null, host: OTHER_HOST });
+  assert.ok(result.isError, "an extra host argument is rejected");
+});
+
+test("the user picks from all hosts without a default, and only the chosen host reaches Claude", async () => {
+  const { call, calls, asked } = await connect({ choose: OTHER_HOST });
+  const selected = await call("select_environment", { environment_session: null });
+  const property = asked[0].requestedSchema.properties.environment;
+  assert.deepEqual(property.enum, ["klant.ogsm.online", OTHER_HOST]);
+  assert.equal(property.default, undefined);
+  assert.equal(selected.json.environment, OTHER_HOST);
+  assert.ok(!selected.text.includes("klant.ogsm.online"), "the other host is not in the output");
+  assert.doesNotMatch(selected.text, /switch|another environment/i);
+
+  const result = await call("list_actions", { environment_session: selected.json.environment_session, canvas_id: 3 });
+  assert.equal(result.json.environment, OTHER_HOST);
+  assert.deepEqual(calls.at(-1), {
+    url: "https://example.ogsm.online/api/v3/actions.json?canvas_id=3&page=1",
+    method: "GET",
+    auth: "Bearer test-token-bbbb",
+    body: undefined,
+  });
+});
+
+test("even a single configured environment is chosen by the user", async () => {
+  const { call, asked } = await connect({ env: { OGSM_ENV_1_HOST: "klant.ogsm.online", OGSM_ENV_1_TOKEN: "t" } });
+  assert.equal((await call("select_environment", { environment_session: null })).json.environment, "klant.ogsm.online");
+  assert.equal(asked.length, 1);
+});
+
+test("declining the picker selects nothing and names no environment", async () => {
+  const { call, calls } = await connect({ elicit: async () => ({ action: "decline" }) });
+  const result = await call("select_environment", { environment_session: null });
+  assert.ok(result.isError);
+  assert.ok(!result.text.includes("ogsm.online environment:") && !result.text.includes(OTHER_HOST));
+  assert.ok(!result.text.includes("klant.ogsm.online"));
+  assert.equal(calls.length, 0);
+});
+
+test("a picked value that is not configured is refused", async () => {
+  const { call } = await connect({ elicit: async () => ({ action: "accept", content: { environment: "evil.example.com" } }) });
+  assert.ok((await call("select_environment", { environment_session: null })).isError);
+});
+
+test("without elicitation the user is told to update Claude Desktop, and Claude cannot choose", async () => {
+  const { call, calls } = await connect({ elicitation: false });
+  const result = await call("select_environment", { environment_session: null });
+  assert.ok(result.isError);
+  assert.match(result.text, /update Claude Desktop/);
+  assert.ok(!result.text.includes("klant.ogsm.online") && !result.text.includes(OTHER_HOST));
+  assert.ok((await call("list_canvases", {})).isError);
+  assert.equal(calls.length, 0);
+});
+
+test("a conversation with a valid environment_session cannot select a second environment", async () => {
+  const { call, asked, select } = await connect();
+  const session = await select();
+  const second = await call("select_environment", { environment_session: session });
+  assert.ok(second.isError);
+  assert.match(second.text, /start a new conversation to work with another environment/i);
+  assert.match(second.text, /klant\.ogsm\.online/);
+  assert.ok(!second.text.includes(OTHER_HOST));
+  assert.equal(asked.length, 1, "the user is not asked again");
+  assert.equal((await call("list_teams", { environment_session: session })).json.environment, "klant.ogsm.online");
+});
+
+test("environment_session is required, so Claude has to state whether the conversation has one", async () => {
   const { call } = await connect();
-  const result = await call("list_environments");
-  assert.deepEqual(result.json.environments, ["klant.ogsm.online", "example.ogsm.online"]);
-  assert.ok(!result.text.includes("test-token"));
+  assert.ok((await call("select_environment", {})).isError);
+});
+
+test("an unknown or expired environment_session leads to a fresh pick", async () => {
+  const { call, asked } = await connect();
+  const result = await call("select_environment", { environment_session: "made-up" });
+  assert.equal(result.json.environment, "klant.ogsm.online");
+  assert.equal(asked.length, 1);
+});
+
+test("no tool output leaks another configured host", async () => {
+  const { call, select } = await connect();
+  const session = await select();
+  const outputs = [];
+  for (const tool of API_TOOLS) {
+    outputs.push((await call(tool.name, { environment_session: session, canvas_id: 3, action_id: 1, comment_id: 2, title: "x", content: "x", parent_id: 1, objective_id: 1, goal_id: 1, strategy_id: 1, indicator_id: 1 })).text);
+    outputs.push((await call(tool.name, {})).text);
+  }
+  for (const text of outputs) assert.ok(!text.includes(OTHER_HOST), text);
 });
 
 test("every API tool refuses before an environment is selected, without calling the API", async () => {
@@ -61,67 +177,11 @@ test("every API tool refuses before an environment is selected, without calling 
   assert.equal(calls.length, 0);
 });
 
-test("a single configured environment still has to be selected explicitly", async () => {
-  const { call, calls } = await connect({ env: { OGSM_ENV_1_HOST: "klant.ogsm.online", OGSM_ENV_1_TOKEN: "t" } });
-  assert.ok((await call("list_canvases")).isError);
-  assert.ok((await call("select_environment", {})).isError);
-  assert.equal(calls.length, 0);
-});
-
-test("after select_environment, tools use that environment's host and token", async () => {
-  const { call, calls } = await connect();
-  const selected = await call("select_environment", { host: "example.ogsm.online" });
-  const session = selected.json.environment_session;
-  assert.equal(selected.json.environment, "example.ogsm.online");
-
-  const result = await call("list_actions", { environment_session: session, canvas_id: 3 });
-  assert.equal(result.json.environment, "example.ogsm.online");
-  assert.deepEqual(calls.at(-1), {
-    url: "https://example.ogsm.online/api/v3/actions.json?canvas_id=3&page=1",
-    method: "GET",
-    auth: "Bearer test-token-bbbb",
-    body: undefined,
-  });
-});
-
-test("switching needs another select_environment call", async () => {
-  const { call, calls } = await connect();
-  const first = (await call("select_environment", { host: "klant.ogsm.online" })).json.environment_session;
-  const second = (await call("select_environment", { host: "example.ogsm.online" })).json.environment_session;
-  await call("list_teams", { environment_session: first });
-  await call("list_teams", { environment_session: second });
-  assert.deepEqual(
-    calls.map((c) => c.url),
-    ["https://klant.ogsm.online/api/v3/teams.json?page=1", "https://example.ogsm.online/api/v3/teams.json?page=1"]
-  );
-});
-
-test("select_environment refuses hosts that are not configured", async () => {
-  const { call } = await connect();
-  const result = await call("select_environment", { host: "evil.example.com" });
-  assert.ok(result.isError);
-  assert.match(result.text, /not a configured environment/);
-});
-
-test("with elicitation, the user's own pick decides and declining selects nothing", async () => {
-  const asked = [];
-  const answers = [
-    { action: "accept", content: { environment: "klant.ogsm.online" } },
-    { action: "decline" },
-  ];
-  const { call } = await connect({
-    elicit: async (request) => {
-      asked.push(request.params);
-      return answers.shift();
-    },
-  });
-  const picked = await call("select_environment", { host: "example.ogsm.online" });
-  assert.equal(picked.json.environment, "klant.ogsm.online");
-  assert.deepEqual(asked[0].requestedSchema.properties.environment.enum, ["klant.ogsm.online", "example.ogsm.online"]);
-  assert.equal(asked[0].requestedSchema.properties.environment.default, undefined);
-
-  const declined = await call("select_environment", { host: "example.ogsm.online" });
-  assert.ok(declined.isError);
+test("no configured environment: select_environment points to the settings", async () => {
+  const { call, asked } = await connect({ env: {} });
+  const result = await call("select_environment", { environment_session: null });
+  assert.match(result.text, /extension settings/);
+  assert.equal(asked.length, 0);
 });
 
 const ROUTES = [
@@ -160,8 +220,8 @@ const ROUTES = [
 
 test("every API tool sends the expected request", async () => {
   assert.deepEqual(ROUTES.map((r) => r[0]).sort(), API_TOOLS.map((t) => t.name).sort());
-  const { call, calls } = await connect();
-  const session = (await call("select_environment", { host: "klant.ogsm.online" })).json.environment_session;
+  const { call, calls, select } = await connect();
+  const session = await select();
   for (const [name, args, method, path, body] of ROUTES) {
     const result = await call(name, { environment_session: session, ...args });
     assert.ok(!result.isError, `${name}: ${result.text}`);
@@ -173,8 +233,8 @@ test("every API tool sends the expected request", async () => {
 });
 
 test("list tools can filter on a canvas", async () => {
-  const { call } = await connect();
-  const session = (await call("select_environment", { host: "klant.ogsm.online" })).json.environment_session;
+  const { call, select } = await connect();
+  const session = await select();
   assert.equal((await call("list_goals", { environment_session: session, canvas_id: 3 })).json.data.length, 1);
   assert.equal((await call("list_goals", { environment_session: session, canvas_id: 4 })).json.data.length, 0);
 });

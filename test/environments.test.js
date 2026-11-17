@@ -73,21 +73,32 @@ test("nothing is selected until select is called, and the key binds one environm
   assert.equal(g.require(key).host, "example.ogsm.online");
 });
 
-test("select refuses an empty or unknown host", () => {
+test("select refuses an empty or unknown host without naming the configured ones", () => {
   const g = gate();
-  assert.throws(() => g.select(""), /Ask the user/);
-  assert.throws(() => g.select(undefined), /Ask the user/);
-  assert.throws(() => g.select("evil.example.com"), /not a configured environment/);
+  for (const host of ["", undefined, "evil.example.com"]) {
+    assert.throws(
+      () => g.select(host),
+      (error) => /not configured/.test(error.message) && !/ogsm\.online/.test(error.message)
+    );
+  }
+});
+
+test("current returns the environment of a valid key only", () => {
+  const g = gate();
+  assert.equal(g.current(undefined), null);
+  assert.equal(g.current("made-up"), null);
+  const { key } = g.select("klant.ogsm.online");
+  assert.equal(g.current(key).host, "klant.ogsm.online");
 });
 
 test("a single configured environment is never selected automatically", () => {
   const { environments } = loadEnvironments({ OGSM_ENV_1_HOST: "klant.ogsm.online", OGSM_ENV_1_TOKEN: TOKEN_A });
   const g = new EnvironmentGate(environments);
   assert.throws(() => g.require(undefined), /No OGSM.online environment is selected/);
-  assert.throws(() => g.select(undefined), /Ask the user/);
+  assert.throws(() => g.select(undefined), /not configured/);
 });
 
-test("switching needs a new select, and each conversation's key stays bound to its own choice", () => {
+test("each conversation's key stays bound to its own choice", () => {
   const g = gate();
   const first = g.select("klant.ogsm.online");
   const second = g.select("example.ogsm.online");

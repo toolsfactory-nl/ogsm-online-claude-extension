@@ -1,5 +1,5 @@
-// Tool definitions: every tool except list_environments and select_environment needs the
-// environment_session that select_environment returned in this conversation.
+// Tool definitions: every tool except select_environment needs the environment_session that
+// select_environment returned in this conversation.
 
 import { OgsmClient, ApiError } from "./api.js";
 import { EnvironmentNotSelectedError } from "./environments.js";
@@ -9,7 +9,7 @@ const SESSION_PARAM = "environment_session";
 const sessionSchema = {
   type: "string",
   description:
-    "The environment_session returned by select_environment in this conversation, after the user chose the environment.",
+    "The environment_session that select_environment returned in this conversation.",
 };
 
 const id = (description) => ({ type: "integer", minimum: 1, description });
@@ -324,33 +324,32 @@ export const API_TOOLS = [
   reportTools("indicator"),
 ];
 
-export const SERVER_INSTRUCTIONS = `This server works with OGSM.online environments (tenants). Before any other tool, in every
-conversation: call list_environments, then ASK THE USER which environment to work in, even when only one
-is configured, and wait for their answer. Only then call select_environment with the host they chose, and
-pass the environment_session it returns to every other tool. Never choose an environment yourself, never
-reuse an environment_session from another conversation, and to switch environments ask the user and call
-select_environment again. Mention the environment when you report results or make changes.`;
+export const SERVER_INSTRUCTIONS = `This server works with one OGSM.online environment per conversation. Before any other
+tool, call select_environment with environment_session null: the user then chooses the environment in a form of
+their own, and you get back only that environment and an environment_session. Pass that environment_session to
+every other tool. Work only in the selected environment for the whole conversation. Never mention, suggest,
+guess or compare any other environment, and never offer to repeat work elsewhere. Never reuse an
+environment_session from another conversation. If the user wants another environment, tell them to start a new
+conversation.`;
 
 const GATE_TOOLS = [
   {
-    name: "list_environments",
-    description:
-      "List the OGSM.online environments configured in the extension settings (host names only). Call this first, " +
-      "then ask the user which one to work in, even if there is only one.",
-    annotations: { readOnlyHint: true },
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
     name: "select_environment",
     description:
-      "Select the OGSM.online environment the user explicitly chose for this conversation. Only call this with the " +
-      "host the user named in answer to your question; never pick one yourself, even if only one is configured. " +
-      "Returns an environment_session to pass to every other tool. Call again (after asking) to switch.",
+      "Let the user choose the OGSM.online environment for this conversation. The user picks it in a form of " +
+      "their own; you do not name or see the options. Pass environment_session null the first time; if this " +
+      "conversation already has an environment_session, pass it (it is then refused, as a conversation works in " +
+      "one environment only). Returns the chosen environment and the environment_session for every other tool.",
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: "object",
-      properties: { host: text("The host the user chose, exactly as listed by list_environments.") },
-      required: ["host"],
+      properties: {
+        [SESSION_PARAM]: {
+          type: ["string", "null"],
+          description: "The environment_session this conversation already has, or null when it has none.",
+        },
+      },
+      required: [SESSION_PARAM],
       additionalProperties: false,
     },
   },
@@ -373,40 +372,14 @@ function fail(message) {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
-// Dispatches one tool call. `confirm(host, names)` may ask the user directly (MCP elicitation)
-// and resolves to the host the user picked, or null when they declined.
-export async function callTool(name, args = {}, { gate, problems = [], fetch, confirm } = {}) {
+export const NEW_CONVERSATION = "Start a new conversation to work with another environment.";
+
+// Dispatches one tool call. `pick(names)` asks the user to choose (MCP elicitation) and resolves
+// to { host } or { problem }. The model never sees the configured hosts.
+export async function callTool(name, args = {}, { gate, fetch, pick } = {}) {
   args = args || {};
   try {
-    if (name === "list_environments") {
-      return ok({
-        environments: gate.names(),
-        ...(problems.length ? { configuration_problems: problems } : {}),
-        next_step:
-          gate.names().length === 0
-            ? "No environment is configured. Ask the user to add a host and personal API token in the extension settings."
-            : "Ask the user which of these environments to work in, then call select_environment with their answer.",
-      });
-    }
-    if (name === "select_environment") {
-      let host = args.host;
-      const environment = gate.find(host);
-      // Where the client supports it, the user picks the environment in a form shown by the client
-      // itself, so the choice does not rest on the model alone.
-      if (environment && confirm) {
-        const chosen = await confirm(environment.host, gate.names());
-        if (!chosen) {
-          return fail(`The user did not choose an environment. Ask the user which environment to work in.`);
-        }
-        host = chosen;
-      }
-      const { key, environment: selected } = gate.select(host);
-      return ok({
-        environment: selected.host,
-        [SESSION_PARAM]: key,
-        note: "Pass this environment_session to every other tool in this conversation. To switch, ask the user and call select_environment again.",
-      });
-    }
+    if (name === "select_environment") return await selectEnvironment(args, { gate, pick });
     const tool = API_TOOLS.find((t) => t.name === name);
     if (!tool) return fail(`Unknown tool: ${name}`);
     const environment = gate.require(args[SESSION_PARAM]);
@@ -417,4 +390,44 @@ export async function callTool(name, args = {}, { gate, problems = [], fetch, co
     if (error instanceof EnvironmentNotSelectedError || error instanceof ApiError) return fail(error.message);
     return fail(`Unexpected error: ${error.message}`);
   }
+}
+
+async function selectEnvironment(args, { gate, pick }) {
+  const extra = Object.keys(args).filter((key) => key !== SESSION_PARAM);
+  if (extra.length || !(SESSION_PARAM in args)) {
+    return fail(
+      "select_environment takes only environment_session: null when this conversation has none yet, otherwise " +
+        "the one it has. The user chooses the environment."
+    );
+  }
+  const existing = gate.current(args[SESSION_PARAM]);
+  if (existing) {
+    return fail(`This conversation already works in ${existing.host}; it works in one environment only. ${NEW_CONVERSATION}`);
+  }
+  const names = gate.names();
+  if (names.length === 0) {
+    return fail(
+      "No OGSM.online environment is configured. Ask the user to add a host and personal API token in the " +
+        "extension settings (Settings → Extensions)."
+    );
+  }
+  const result = pick ? await pick(names) : { problem: "unsupported" };
+  if (result.problem === "unsupported") {
+    return fail(
+      "This version of Claude Desktop cannot show the environment picker (MCP elicitation). Tell the user to " +
+        "update Claude Desktop to the latest version; until then the OGSM.online tools cannot be used."
+    );
+  }
+  if (result.problem === "failed") {
+    return fail("The environment picker could not be shown. Ask the user to try again, or to update Claude Desktop.");
+  }
+  if (result.problem) {
+    return fail("The user did not choose an environment, so no OGSM.online tool can be used in this conversation.");
+  }
+  const { key, environment } = gate.select(result.host);
+  return ok({
+    environment: environment.host,
+    [SESSION_PARAM]: key,
+    note: "Pass this environment_session to every other tool. Work only in this environment for the rest of this conversation.",
+  });
 }

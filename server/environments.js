@@ -73,10 +73,11 @@ export class EnvironmentNotSelectedError extends Error {}
 
 // The MCP server process lives as long as Claude Desktop runs and is shared by every
 // conversation, so a process-wide "current environment" would leak from one chat into the
-// next. Instead, each explicit select_environment call hands out a random session key that
-// is bound to one environment. Every other tool needs that key; it only exists in the
-// transcript of the conversation where the user made the choice, so a new conversation has
-// to select (and so ask) again. Switching means another select_environment call.
+// next. Instead, each selection hands out a random session key that is bound to one
+// environment. Every other tool needs that key; it only exists in the transcript of the
+// conversation where the user made the choice, so a new conversation has to select (and so
+// ask) again. A conversation works in one environment only: select_environment refuses while
+// the key it is given is still valid.
 export class EnvironmentGate {
   constructor(environments, { now = () => Date.now(), ttlMs = 12 * 60 * 60 * 1000 } = {}) {
     this.environments = environments;
@@ -100,39 +101,35 @@ export class EnvironmentGate {
     return this.environments.find((e) => e.host === normalised.host) || null;
   }
 
+  // Only called with the host the user picked; the error never names other environments.
   select(host) {
-    if (typeof host !== "string" || host.trim() === "") {
-      throw new EnvironmentNotSelectedError(
-        "Name the environment the user chose. Ask the user first; never pick one yourself."
-      );
-    }
-    const environment = this.find(host);
-    if (!environment) {
-      const names = this.names();
-      throw new EnvironmentNotSelectedError(
-        `"${host}" is not a configured environment. Configured: ${names.length ? names.join(", ") : "none"}.`
-      );
-    }
+    const environment = typeof host === "string" ? this.find(host) : null;
+    if (!environment) throw new EnvironmentNotSelectedError("The chosen environment is not configured.");
     this.prune();
     const key = randomBytes(12).toString("base64url");
     this.sessions.set(key, { host: environment.host, expiresAt: this.now() + this.ttlMs });
     return { key, environment };
   }
 
-  // Returns the environment bound to the key, or throws when there is none.
-  require(key) {
+  // Returns the environment bound to a still valid key, or null. Does not extend the key.
+  current(key) {
     this.prune();
     const session = typeof key === "string" ? this.sessions.get(key) : undefined;
-    if (!session) {
+    if (!session) return null;
+    return this.environments.find((e) => e.host === session.host) || null;
+  }
+
+  // Returns the environment bound to the key, or throws when there is none.
+  require(key) {
+    const environment = this.current(key);
+    if (!environment) {
       throw new EnvironmentNotSelectedError(
-        "No OGSM.online environment is selected in this conversation. Call list_environments, ask the user " +
-          "which environment to work in (even if only one is configured), then call select_environment with " +
-          "their answer and pass the returned environment_session to this tool."
+        "No OGSM.online environment is selected in this conversation. Call select_environment (with " +
+          "environment_session null); the user then chooses the environment. Pass the returned " +
+          "environment_session to this tool."
       );
     }
-    const environment = this.environments.find((e) => e.host === session.host);
-    if (!environment) throw new EnvironmentNotSelectedError("The selected environment is no longer configured.");
-    session.expiresAt = this.now() + this.ttlMs;
+    this.sessions.get(key).expiresAt = this.now() + this.ttlMs;
     return environment;
   }
 
