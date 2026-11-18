@@ -1,3 +1,4 @@
+# Repository files that are not part of the extension
 .git/
 .github/
 test/
@@ -6,3 +7,12 @@ scripts/
 .mcpbignore
 .gitignore
 .DS_Store
+
+# Build-only files in dependencies: TypeScript sources and type definitions,
+# source maps and package docs. Node only loads the .js/.cjs/.mjs files.
+node_modules/**/*.ts
+node_modules/**/*.cts
+node_modules/**/*.mts
+node_modules/**/*.map
+node_modules/**/*.md
+node_modules/.package-lock.json

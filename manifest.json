@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ogsm-online",
   "display_name": "OGSM.online",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Work with your OGSM.online plans, actions and comments from Claude, in one environment per conversation.",
   "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure your OGSM.online environments (host + personal API token) in the extension settings. At the start of a conversation Claude asks which environment you mean and you type its host (or choose it in a picker where the app offers one); Claude never sees the list of configured environments, only learns the one you chose and works in it for the whole conversation. To work in another environment, start a new conversation. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies, indicators and measurements.",
   "author": {

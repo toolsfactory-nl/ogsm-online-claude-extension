@@ -150,12 +150,17 @@ Run the server by hand with `OGSM_ENV_1_HOST=… OGSM_ENV_1_TOKEN=… node serve
 
 ### Release
 
-1. Bump `version` in both `manifest.json` and `package.json`.
+1. Bump `version` in `manifest.json`, `package.json` and `package-lock.json`.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 
-GitHub Actions runs the tests, packs the extension with
-`@anthropic-ai/mcpb pack` (production dependencies only) and attaches
-`ogsm-online-v0.2.0.mcpb` to a new GitHub Release.
+GitHub Actions runs the tests, packs the extension with `node scripts/pack.js`
+and attaches `ogsm-online-v0.2.0.mcpb` to a new GitHub Release.
+
+`npm run pack` builds the same package locally: it copies the extension to a
+staging directory, installs production dependencies only there
+(`npm ci --omit=dev`) and runs `mcpb pack` on it, so devDependencies never end
+up in the `.mcpb`. `.mcpbignore` also leaves out TypeScript sources, type
+definitions, source maps and docs from `node_modules`.
 
 ---
 

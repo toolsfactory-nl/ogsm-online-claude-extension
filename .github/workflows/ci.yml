@@ -45,10 +45,16 @@ jobs:
             echo "Tag v$tag does not match manifest.json ($manifest) / package.json ($package)" >&2
             exit 1
           fi
-      - name: Install production dependencies only
-        run: npm ci --omit=dev
-      - name: Pack the extension
-        run: npx --yes @anthropic-ai/mcpb@2.1.2 pack . "ogsm-online-${GITHUB_REF_NAME}.mcpb"
+      - name: Install dependencies (dev install provides the mcpb CLI)
+        run: npm ci
+      - name: Pack the extension from a production-only staging directory
+        run: node scripts/pack.js "ogsm-online-${GITHUB_REF_NAME}.mcpb"
+      - name: Check no devDependencies ended up in the package
+        run: |
+          if unzip -Z1 "ogsm-online-${GITHUB_REF_NAME}.mcpb" | grep -E '^node_modules/(@anthropic-ai/mcpb|tmp|@inquirer)/'; then
+            echo "devDependencies found in the .mcpb" >&2
+            exit 1
+          fi
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
