@@ -46,8 +46,13 @@ function describeErrors(json) {
   if (!json || typeof json !== "object") return "";
   if (typeof json.error === "string") return json.error;
   return Object.entries(json)
-    .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(", ") : JSON.stringify(messages)}`)
+    .map(([field, messages]) => `${field}: ${[].concat(messages).map((m) => (typeof m === "string" ? m : JSON.stringify(m))).join(", ")}`)
     .join("; ");
+}
+
+// Response text that is not an HTML page, shortened.
+function plain(text) {
+  return text && !text.trimStart().startsWith("<") ? text.slice(0, 500) : "";
 }
 
 export function errorFor(environment, status, text) {
@@ -65,11 +70,20 @@ export function errorFor(environment, status, text) {
     case 403:
       if (error === "read_only_token") {
         return new ApiError(
-          `${where} read_only_token: the personal API token for ${environment.host} is read only, so it can not ` +
-            `create, change or delete anything. Create a token with "Read and write" access under My settings → ` +
-            `Personal API tokens on ${settingsUrl(environment)} if the user wants to make changes.`,
+          `${where} read_only_token: this token can only read, so it can not create, change or delete anything. ` +
+            `Create a token with "Read and write" access under My settings → Personal API tokens on ` +
+            `${settingsUrl(environment)} if the user wants to make changes.`,
           { status, error }
         );
+      }
+      if (error === "Personal authentication required") {
+        return new ApiError(`${where}: this change needs a personal API token of a user.`, { status, error });
+      }
+      if (error === "comments_hidden") {
+        return new ApiError(`${where} comments_hidden: the comments of this card are hidden for this user.`, {
+          status,
+          error,
+        });
       }
       if (error === "api_disabled") {
         return new ApiError(`${where} api_disabled: the API is not enabled for this OGSM.online environment.`, {
@@ -78,23 +92,29 @@ export function errorFor(environment, status, text) {
         });
       }
       return new ApiError(`${where} forbidden: ${error || "the user is not allowed to do this"}.`, { status, error });
+    case 400:
+      if (error === "invalid_page") {
+        return new ApiError(`${where} invalid_page: page must be a whole number from 1.`, { status, error });
+      }
+      return new ApiError(`${where} bad request: ${describeErrors(json) || "the request is incomplete"}.`, { status, error });
     case 404:
+      // A JSON body names what is missing (e.g. "Goal Not Found"); an HTML page is a generic not found.
       return new ApiError(`${where} not found: ${error || "the record does not exist or is not visible to this user"}.`, {
         status,
         error,
       });
     case 422:
-      return new ApiError(`${where} validation failed: ${describeErrors(json) || text || "unprocessable"}.`, {
+      return new ApiError(`${where} validation failed: ${describeErrors(json) || plain(text) || "unprocessable"}.`, {
         status,
         error: json,
       });
     case 429:
-      return new ApiError(`${where} rate limited: ${error || "too many requests"}. Wait a moment and try again.`, {
+      return new ApiError(`${where} rate limited: ${error || "too many requests"}. Wait a few minutes and try again.`, {
         status,
         error,
       });
     default: {
-      const detail = describeErrors(json) || (text && !text.trimStart().startsWith("<") ? text.slice(0, 500) : "");
+      const detail = describeErrors(json) || plain(text);
       return new ApiError(`${where}${detail ? `: ${detail}` : ""}.`, { status, error });
     }
   }
