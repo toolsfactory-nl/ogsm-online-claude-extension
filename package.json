@@ -1,6 +1,6 @@
 {
   "name": "ogsm-online-claude-extension",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Claude Desktop Extension (MCPB) for the OGSM.online API v3",
   "type": "module",
@@ -25,5 +25,8 @@
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2"
+  },
+  "overrides": {
+    "tmp": "^0.2.6"
   }
 }
