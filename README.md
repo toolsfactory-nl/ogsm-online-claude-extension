@@ -225,8 +225,7 @@ omgeving werken, **begin dan een nieuw gesprek** (een nieuwe chat).
   - `select_environment` vraagt het altijd aan jou, ook als er maar één
     omgeving is ingesteld, en kiest nooit zelf. Zonder keuzelijst zegt het
     Claude dat het jou één korte vraag moet stellen en precies moet doorgeven
-    wat jij typte,
-    zonder een host voor te stellen of te raden. Een getypte host wordt alleen
+    wat jij typte, zonder een host voor te stellen of te raden. Een getypte host wordt alleen
     geaccepteerd als hij precies overeenkomt (hoofdletters, `https://` en een
     `/` aan het eind tellen niet mee); de weigering noemt geen ingestelde host,
     en na 5 missers in 10 minuten worden verdere pogingen een tijd geweigerd,
