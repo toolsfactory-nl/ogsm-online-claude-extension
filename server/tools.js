@@ -15,13 +15,45 @@ const sessionSchema = {
 const id = (description) => ({ type: "integer", minimum: 1, description });
 const text = (description) => ({ type: "string", description });
 const html = (what) =>
-  text(`${what}, as HTML. An <img> with a base64 data URI as its src is stored as an attachment.`);
-const labels = {
+  text(
+    `${what}, as HTML. When editing, send back the full HTML you read (including its <img> tags), or attachments ` +
+      "are lost. An <img> with a base64 data URI as src becomes an attachment (max 10 per request, 10 MB each)."
+  );
+const date = (what) => ({ type: "string", description: `${what} (YYYY-MM-DD)` });
+const integer = (description) => ({ type: "integer", description });
+
+const LABEL_IDS = {
   type: "array",
   items: { type: "string" },
-  description: "Label names. Replaces the labels the card has.",
+  description:
+    "Label names (or ids). Replaces the whole set of labels: [] clears them, omit to keep them. An unknown name " +
+    "creates a label where allowed, otherwise it is dropped.",
 };
-const date = (what) => ({ type: "string", description: `${what} (YYYY-MM-DD)` });
+const ASSIGNEE = {
+  type: ["integer", "null"],
+  minimum: 1,
+  description: "Id of the user to assign (see list_users); null removes the assignee.",
+};
+const TRAFFIC_LIGHT = {
+  type: ["string", "null"],
+  description:
+    'Traffic light in the language of the environment: nl "groen", "oranje", "rood"; en "green", "amber", "red". ' +
+    'Clear it with "" or null, never with "leeg" or "empty". An unknown value silently clears it.',
+};
+const VALUE = (what) => ({
+  type: ["number", "string", "null"],
+  description: `${what}: a number or numeric string (e.g. 42 or "43,5"); null or "" erases it.`,
+});
+const PAGE = {
+  type: "integer",
+  minimum: 1,
+  description: "Return only this page (1500 records, ordered by id) with its meta. Omit to get all records.",
+};
+
+const NO_MOVE = "A card can't be moved to another canvas or parent, nor deleted, via the API.";
+const WRITE = "Needs a read and write token.";
+const TL_NOTE = 'traffic_light: nl groen/oranje/rood, en green/amber/red; clear with "" or null, never "leeg".';
+const EDIT_NOTE = "label_ids replaces the whole set; send an HTML description back in full.";
 
 const MEASURE_PROPS = {
   target_unit: text("Unit of the measurements, e.g. % or EUR. A sub goal or sub indicator takes the one of its parent."),
@@ -51,24 +83,34 @@ const MEASURE_PROPS = {
 const CARD_PROPS = {
   title: text("Title"),
   description: html("Description"),
-  assignee_id: id("Id of the user to assign (see list_users)."),
-  labels,
+  assignee_id: ASSIGNEE,
+  label_ids: LABEL_IDS,
 };
 
 const ACTION_PROPS = {
   title: text("Title"),
   description: html("Description"),
   start: date("Start date"),
-  due: date("Due date"),
-  status: text('Status: a status id, name or base list key ("backlog", "todo", "doing", "done"); see list_statuses.'),
-  effort: text("Effort"),
-  added_value: text("Added value"),
-  priority: text("Priority"),
-  budget_time_available: { type: "number", description: "Available time budget" },
-  budget_money_available: { type: "number", description: "Available money budget" },
-  assignee_id: id("Id of the user to assign (see list_users)."),
-  labels,
+  due: date("Due date. A backlog action that gets a date moves to todo."),
+  list: text('Status: a status id, name or base key ("backlog", "todo", "doing", "done"); see list_statuses.'),
+  effort: integer("Effort"),
+  added_value: integer("Added value"),
+  priority: { type: "string", enum: ["none", "low", "normal", "high", "very_high"] },
+  budget_time_available: integer("Available time budget"),
+  budget_money_available: integer("Available money budget"),
+  assignee_id: ASSIGNEE,
+  label_ids: LABEL_IDS,
 };
+const ACTION_KEYS = Object.keys(ACTION_PROPS);
+
+const MEASUREMENT_PROPS = {
+  at: date("Date of the measurement"),
+  current_value: VALUE("Measured value"),
+  target_value: VALUE("Target value"),
+  traffic_light: TRAFFIC_LIGHT,
+  show_in_ogsm: { type: "boolean", description: "Show this measurement on the OGSM." },
+};
+const MEASUREMENT_KEYS = Object.keys(MEASUREMENT_PROPS);
 
 function schema(properties, required = []) {
   return {
@@ -83,6 +125,11 @@ function pathId(value, name) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 1) throw new ApiError(`${name} must be a positive integer id`);
   return number;
+}
+
+function uuid(value, name) {
+  if (typeof value !== "string" || !/^[0-9a-f-]{8,64}$/i.test(value)) throw new ApiError(`${name} must be a batch id (UUID)`);
+  return value;
 }
 
 // Copies the given keys from args to body when present, renaming via the map.
@@ -100,24 +147,7 @@ function requireChanges(body) {
 }
 
 export function actionBody(args, { create }) {
-  const body = pick(
-    args,
-    [
-      "title",
-      "description",
-      "start",
-      "due",
-      "status",
-      "effort",
-      "added_value",
-      "priority",
-      "budget_time_available",
-      "budget_money_available",
-      "assignee_id",
-      "labels",
-    ],
-    { status: "list", labels: "label_ids" }
-  );
+  const body = pick(args, ACTION_KEYS);
   if (create) {
     body.canvas = { id: pathId(args.canvas_id, "canvas_id") };
     if (args.strategy_id !== undefined) body.strategy = { id: pathId(args.strategy_id, "strategy_id") };
@@ -129,28 +159,84 @@ export function actionBody(args, { create }) {
 // kind: objective | goal | strategy | indicator
 export function cardBody(kind, args, { create }) {
   const measured = kind === "goal" || kind === "indicator";
-  const keys = ["title", "description", "assignee_id", "labels"];
+  const keys = Object.keys(CARD_PROPS);
   if (measured) keys.push(...Object.keys(MEASURE_PROPS));
-  const body = pick(args, keys, { labels: "label_ids" });
+  const body = pick(args, keys);
   if (create) {
     body.canvas = { id: pathId(args.canvas_id, "canvas_id") };
-    if ((kind === "goal" || kind === "indicator") && args.parent_id !== undefined) {
-      body.parent = { id: pathId(args.parent_id, "parent_id") };
-    }
+    if (measured && args.parent_id !== undefined) body.parent = { id: pathId(args.parent_id, "parent_id") };
     return { [`ogsm_${kind}`]: body };
   }
   return { [`ogsm_${kind}`]: requireChanges(body) };
 }
 
-function onCanvas(records, canvasId) {
-  if (canvasId === undefined) return records;
+// kind: goal | indicator
+export function measurementBody(kind, args, { create }) {
+  const body = pick(args, MEASUREMENT_KEYS);
+  if (create) {
+    body[kind] = { id: pathId(args[`${kind}_id`], `${kind}_id`) };
+    return { [`${kind}_report`]: body };
+  }
+  return { [`${kind}_report`]: requireChanges(body) };
+}
+
+export const MAX_BATCH_OPERATIONS = 500;
+
+// kind: goal | indicator
+export function batchBody(kind, args) {
+  const operations = args.operations;
+  if (!Array.isArray(operations) || operations.length === 0) throw new ApiError("operations must be a non-empty array");
+  if (operations.length > MAX_BATCH_OPERATIONS) {
+    throw new ApiError(`A batch holds at most ${MAX_BATCH_OPERATIONS} operations; split it into several batches.`);
+  }
+  return {
+    [`${kind}_report_batch`]: {
+      operations: operations.map((operation, index) => {
+        const op = operation?.op;
+        if (!["create", "update", "delete"].includes(op)) {
+          throw new ApiError(`operations[${index}].op must be create, update or delete`);
+        }
+        const out = { op };
+        if (op === "create") {
+          out[kind] = { id: pathId(operation[`${kind}_id`], `operations[${index}].${kind}_id`) };
+        } else {
+          out.id = pathId(operation.id, `operations[${index}].id`);
+        }
+        if (op !== "delete") Object.assign(out, pick(operation, MEASUREMENT_KEYS));
+        return out;
+      }),
+    },
+  };
+}
+
+function onCanvas(canvasId) {
+  if (canvasId === undefined) return (records) => records;
   const wanted = pathId(canvasId, "canvas_id");
-  return records.filter((r) => (r.ogsm_canvases || []).some((c) => c.id === wanted));
+  return (records) => records.filter((r) => (r.ogsm_canvases || []).some((c) => c.id === wanted));
+}
+
+function ofRecord(kind, value) {
+  if (value === undefined) return (records) => records;
+  const wanted = pathId(value, `${kind}_id`);
+  return (records) => records.filter((r) => r[kind]?.id === wanted);
+}
+
+// All pages, or only args.page with its meta ({ data, meta }). `filter` narrows the records client side.
+async function list(client, path, args, { query = {}, filter = (records) => records } = {}) {
+  if (args.page === undefined) return filter(await client.getAll(path, query));
+  const page = pathId(args.page, "page");
+  const body = await client.get(path, { ...query, page });
+  if (Array.isArray(body)) return filter(body);
+  return { data: filter(body?.data || []), meta: body?.meta };
 }
 
 const an = (kind) => (/^[aeiou]/.test(kind) ? `an ${kind}` : `a ${kind}`);
 
-const PLURAL = { objective: "objectives", goal: "goals", strategy: "strategies", indicator: "indicators" };
+const PLURAL = { objective: "objectives", goal: "goals", strategy: "strategies", indicator: "indicators", action: "actions" };
+
+const READ = { readOnlyHint: true };
+const WRITES = { readOnlyHint: false, destructiveHint: false };
+const DELETES = { readOnlyHint: false, destructiveHint: true };
 
 function cardTools(kind) {
   const plural = PLURAL[kind];
@@ -158,38 +244,36 @@ function cardTools(kind) {
   const props = measured ? { ...CARD_PROPS, ...MEASURE_PROPS } : CARD_PROPS;
   const createProps = { canvas_id: id(`Id of the canvas (OGSM) the ${kind} belongs to.`), ...props };
   const createRequired = ["canvas_id", "title"];
-  let placement = `An ${kind} stands on the OGSM itself and takes no parent.`;
+  let placement = `${an(kind)[0].toUpperCase()}${an(kind).slice(1)} takes no parent.`;
   if (kind === "goal") {
     createProps.parent_id = id("Optional id of a goal on the same canvas, to make this a sub goal.");
-    placement = "Pass parent_id (a goal on the same canvas) to make it a sub goal.";
+    placement = "Optional parent_id: a goal on the same canvas, for a sub goal.";
   } else if (kind === "indicator") {
     createProps.parent_id = id(
       "Id of a strategy on the same canvas, or of an indicator there to make this a sub indicator."
     );
     createRequired.push("parent_id");
     placement = "parent_id is required: a strategy on the same canvas, or an indicator there for a sub indicator.";
-  } else if (kind === "strategy") {
-    placement = "A strategy stands on the OGSM itself and takes no parent.";
   }
   return [
     {
       name: `list_${plural}`,
       description: `List the ${plural} visible to the user, optionally only those on one canvas.`,
-      annotations: { readOnlyHint: true },
-      inputSchema: schema({ canvas_id: id("Only return records on this canvas.") }),
-      run: async (client, args) => onCanvas(await client.getAll(`${plural}.json`), args.canvas_id),
+      annotations: READ,
+      inputSchema: schema({ canvas_id: id("Only return records on this canvas."), page: PAGE }),
+      run: (client, args) => list(client, `${plural}.json`, args, { filter: onCanvas(args.canvas_id) }),
     },
     {
       name: `create_${kind}`,
-      description: `Create ${an(kind)} on a canvas. ${placement} Needs a read and write token.`,
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      description: `Create ${an(kind)} on a canvas. ${placement} The canvas and parent can't be changed later. ${WRITE}`,
+      annotations: WRITES,
       inputSchema: schema(createProps, createRequired),
       run: (client, args) => client.post(`${plural}.json`, cardBody(kind, args, { create: true })),
     },
     {
       name: `update_${kind}`,
-      description: `Update ${an(kind)}. Only the fields passed are changed. Needs a read and write token.`,
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      description: `Update ${an(kind)}; only the fields passed change. ${EDIT_NOTE} ${NO_MOVE} ${WRITE}`,
+      annotations: WRITES,
       inputSchema: schema({ [`${kind}_id`]: id(`Id of the ${kind}.`), ...props }, [`${kind}_id`]),
       run: (client, args) =>
         client.patch(`${plural}/${pathId(args[`${kind}_id`], `${kind}_id`)}.json`, cardBody(kind, args, { create: false })),
@@ -197,62 +281,142 @@ function cardTools(kind) {
   ];
 }
 
-function reportTools(kind) {
+const REPORT_FIELDS = {
+  objective: "traffic light, description and decision",
+  strategy: "traffic light, description and decision",
+  action: "traffic light, progress, status, used budgets, description and decision",
+  goal: "current and target value, traffic light, show_in_ogsm, description and decision",
+  indicator: "current and target value, traffic light, show_in_ogsm, description and decision",
+};
+
+function reportListTool(kind) {
   return {
     name: `list_${kind}_reports`,
-    description: `List the measurements (reports) of ${kind}s, optionally of one ${kind}.`,
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({ [`${kind}_id`]: id(`Only return reports of this ${kind}.`) }),
-    run: async (client, args) => {
-      const records = await client.getAll(`${kind}_reports.json`);
-      if (args[`${kind}_id`] === undefined) return records;
-      const wanted = pathId(args[`${kind}_id`], `${kind}_id`);
-      return records.filter((r) => r[kind]?.id === wanted);
-    },
+    description:
+      `List the ${kind} reports (${REPORT_FIELDS[kind]}; kind current, aggregation, impose_down, imposed or ` +
+      `target), optionally of one ${kind}. Values and traffic lights are in the language of the environment.`,
+    annotations: READ,
+    inputSchema: schema({ [`${kind}_id`]: id(`Only return reports of this ${kind}.`), page: PAGE }),
+    run: (client, args) => list(client, `${kind}_reports.json`, args, { filter: ofRecord(kind, args[`${kind}_id`]) }),
   };
 }
+
+// Single measurements and batches of goals or indicators.
+function measurementTools(kind) {
+  const path = `${kind}_reports`;
+  const reportId = `${kind}_report_id`;
+  const batchPath = `${kind}_report_batches`;
+  const operation = {
+    type: "object",
+    properties: {
+      op: { type: "string", enum: ["create", "update", "delete"] },
+      id: id(`Id of the ${kind} report (update and delete).`),
+      [`${kind}_id`]: id(`Id of the ${kind} (create).`),
+      ...MEASUREMENT_PROPS,
+    },
+    required: ["op"],
+    additionalProperties: false,
+  };
+  return [
+    {
+      name: `create_${kind}_report`,
+      description:
+        `Add a measurement to ${an(kind)}. at is required; description, decision and kind can't be set. ${TL_NOTE} ${WRITE}`,
+      annotations: WRITES,
+      inputSchema: schema({ [`${kind}_id`]: id(`Id of the ${kind}.`), ...MEASUREMENT_PROPS }, [`${kind}_id`, "at"]),
+      run: (client, args) => client.post(`${path}.json`, measurementBody(kind, args, { create: true })),
+    },
+    {
+      name: `update_${kind}_report`,
+      description: `Change a measurement of ${an(kind)}; only the fields passed change. ${TL_NOTE} ${WRITE}`,
+      annotations: WRITES,
+      inputSchema: schema({ [reportId]: id(`Id of the ${kind} report.`), ...MEASUREMENT_PROPS }, [reportId]),
+      run: (client, args) =>
+        client.patch(`${path}/${pathId(args[reportId], reportId)}.json`, measurementBody(kind, args, { create: false })),
+    },
+    {
+      name: `delete_${kind}_report`,
+      description: `Delete a measurement of ${an(kind)}. ${WRITE}`,
+      annotations: DELETES,
+      inputSchema: schema({ [reportId]: id(`Id of the ${kind} report.`) }, [reportId]),
+      run: async (client, args) => {
+        const reportIdValue = pathId(args[reportId], reportId);
+        return (await client.delete(`${path}/${reportIdValue}.json`)) ?? { deleted: reportIdValue };
+      },
+    },
+    {
+      name: `create_${kind}_report_batch`,
+      description:
+        `Create, update and delete up to ${MAX_BATCH_OPERATIONS} ${kind} measurements in one asynchronous batch. ` +
+        `Each operation: op create (${kind}_id, at, values), update (id, values) or delete (id). Returns the queued ` +
+        `batch; poll get_${kind}_report_batch for the per-operation results. At most 5 batches per 5 minutes. ${TL_NOTE} ${WRITE}`,
+      annotations: DELETES,
+      inputSchema: schema(
+        { operations: { type: "array", minItems: 1, maxItems: MAX_BATCH_OPERATIONS, items: operation } },
+        ["operations"]
+      ),
+      run: (client, args) => client.post(`${batchPath}.json`, batchBody(kind, args)),
+    },
+    {
+      name: `get_${kind}_report_batch`,
+      description:
+        `Get the status (queued, processing, completed, failed) and per-operation results of one of the user's ` +
+        `${kind} report batches.`,
+      annotations: READ,
+      inputSchema: schema({ batch_id: text("Id (UUID) of the batch.") }, ["batch_id"]),
+      run: (client, args) => client.get(`${batchPath}/${uuid(args.batch_id, "batch_id")}.json`),
+    },
+  ];
+}
+
+const commentPath = (args) => `actions/${pathId(args.action_id, "action_id")}/comments`;
+const COMMENT_CARD = id("Id of the card (an action, or any other card you can see).");
 
 export const API_TOOLS = [
   {
     name: "list_canvases",
-    description: "List the OGSM canvases the user can see, with their team id and status.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({}),
-    run: (client) => client.getAll("ogsm_canvases.json"),
+    description: "List the OGSM canvases the user can see, with their team id and status (draft, active, archived).",
+    annotations: READ,
+    inputSchema: schema({ page: PAGE }),
+    run: (client, args) => list(client, "ogsm_canvases.json", args),
   },
   {
     name: "list_teams",
     description: "List the teams the user belongs to.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({}),
-    run: (client) => client.getAll("teams.json"),
+    annotations: READ,
+    inputSchema: schema({ page: PAGE }),
+    run: (client, args) => list(client, "teams.json", args),
   },
   {
     name: "list_users",
     description: "List the users in the user's teams (id, name, email address), e.g. to find an assignee id.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({}),
-    run: (client) => client.getAll("users.json"),
+    annotations: READ,
+    inputSchema: schema({ page: PAGE }),
+    run: (client, args) => list(client, "users.json", args),
   },
   {
     name: "list_statuses",
-    description: "List the statuses an action can have, in board column order.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({}),
-    run: (client) => client.getAll("statuses.json"),
+    description: "List the statuses an action can have (id, name, base list), for the list field of an action.",
+    annotations: READ,
+    inputSchema: schema({ page: PAGE }),
+    run: (client, args) => list(client, "statuses.json", args),
   },
   {
     name: "list_actions",
-    description: "List the actions on a canvas.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({ canvas_id: id("Id of the canvas (see list_canvases).") }, ["canvas_id"]),
-    run: (client, args) => client.getAll("actions.json", { canvas_id: pathId(args.canvas_id, "canvas_id") }),
+    description: "List the actions visible to the user, optionally only those on one canvas.",
+    annotations: READ,
+    inputSchema: schema({ canvas_id: id("Only return actions on this canvas (see list_canvases)."), page: PAGE }),
+    run: (client, args) =>
+      list(client, "actions.json", args, {
+        query: { canvas_id: args.canvas_id === undefined ? undefined : pathId(args.canvas_id, "canvas_id") },
+      }),
   },
   {
     name: "create_action",
     description:
-      "Create an action on a canvas, optionally under a strategy (or under another action). Needs a read and write token.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
+      "Create an action on a canvas, optionally under a strategy (or under another action). The canvas and " +
+      `strategy can't be changed later. Progress, involved, recurring and custom fields can't be set. ${WRITE}`,
+    annotations: WRITES,
     inputSchema: schema(
       {
         canvas_id: id("Id of the canvas the action belongs to."),
@@ -265,63 +429,57 @@ export const API_TOOLS = [
   },
   {
     name: "update_action",
-    description: "Update an action. Only the fields passed are changed. Needs a read and write token.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
+    description: `Update an action; only the fields passed change. ${EDIT_NOTE} ${NO_MOVE} ${WRITE}`,
+    annotations: WRITES,
     inputSchema: schema({ action_id: id("Id of the action."), ...ACTION_PROPS }, ["action_id"]),
     run: (client, args) =>
       client.patch(`actions/${pathId(args.action_id, "action_id")}.json`, actionBody(args, { create: false })),
   },
   {
     name: "list_comments",
-    description: "List the comments on an action.",
-    annotations: { readOnlyHint: true },
-    inputSchema: schema({ action_id: id("Id of the action.") }, ["action_id"]),
-    run: (client, args) => client.getAll(`actions/${pathId(args.action_id, "action_id")}/comments.json`),
+    description: "List the comments on a card.",
+    annotations: READ,
+    inputSchema: schema({ action_id: COMMENT_CARD, page: PAGE }, ["action_id"]),
+    run: (client, args) => list(client, `${commentPath(args)}.json`, args),
   },
   {
     name: "create_comment",
-    description: "Add a comment to an action. Needs a read and write token.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
-    inputSchema: schema({ action_id: id("Id of the action."), content: html("Comment") }, ["action_id", "content"]),
+    description: `Add a comment to a card. ${WRITE}`,
+    annotations: WRITES,
+    inputSchema: schema({ action_id: COMMENT_CARD, content: html("Comment") }, ["action_id", "content"]),
+    run: (client, args) => client.post(`${commentPath(args)}.json`, { comment: { content: args.content } }),
+  },
+  {
+    name: "update_comment",
+    description: `Replace the content of a comment (own comment, or any as tenant admin); send the full HTML. ${WRITE}`,
+    annotations: WRITES,
+    inputSchema: schema({ action_id: COMMENT_CARD, comment_id: id("Id of the comment."), content: html("Comment") }, [
+      "action_id",
+      "comment_id",
+      "content",
+    ]),
     run: (client, args) =>
-      client.post(`actions/${pathId(args.action_id, "action_id")}/comments.json`, {
+      client.patch(`${commentPath(args)}/${pathId(args.comment_id, "comment_id")}.json`, {
         comment: { content: args.content },
       }),
   },
   {
-    name: "update_comment",
-    description: "Change the content of a comment on an action. Needs a read and write token.",
-    annotations: { readOnlyHint: false, destructiveHint: false },
-    inputSchema: schema(
-      { action_id: id("Id of the action."), comment_id: id("Id of the comment."), content: html("Comment") },
-      ["action_id", "comment_id", "content"]
-    ),
-    run: (client, args) =>
-      client.patch(
-        `actions/${pathId(args.action_id, "action_id")}/comments/${pathId(args.comment_id, "comment_id")}.json`,
-        { comment: { content: args.content } }
-      ),
-  },
-  {
     name: "delete_comment",
-    description: "Delete one of the user's own comments on an action. Needs a read and write token.",
-    annotations: { readOnlyHint: false, destructiveHint: true },
-    inputSchema: schema({ action_id: id("Id of the action."), comment_id: id("Id of the comment.") }, [
-      "action_id",
-      "comment_id",
-    ]),
+    description: `Delete one of the user's own comments on a card. ${WRITE}`,
+    annotations: DELETES,
+    inputSchema: schema({ action_id: COMMENT_CARD, comment_id: id("Id of the comment.") }, ["action_id", "comment_id"]),
     run: async (client, args) => {
       const commentId = pathId(args.comment_id, "comment_id");
-      const result = await client.delete(`actions/${pathId(args.action_id, "action_id")}/comments/${commentId}.json`);
-      return result ?? { deleted: commentId };
+      return (await client.delete(`${commentPath(args)}/${commentId}.json`)) ?? { deleted: commentId };
     },
   },
   ...cardTools("objective"),
   ...cardTools("goal"),
   ...cardTools("strategy"),
   ...cardTools("indicator"),
-  reportTools("goal"),
-  reportTools("indicator"),
+  ...["objective", "strategy", "action", "goal", "indicator"].map(reportListTool),
+  ...measurementTools("goal"),
+  ...measurementTools("indicator"),
 ];
 
 export const SERVER_INSTRUCTIONS = `This server works with one OGSM.online environment per conversation. Before any other

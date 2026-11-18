@@ -255,7 +255,7 @@ test("no tool output leaks another configured host", async () => {
   const session = await select();
   const outputs = [];
   for (const tool of API_TOOLS) {
-    outputs.push((await call(tool.name, { environment_session: session, canvas_id: 3, action_id: 1, comment_id: 2, title: "x", content: "x", parent_id: 1, objective_id: 1, goal_id: 1, strategy_id: 1, indicator_id: 1 })).text);
+    outputs.push((await call(tool.name, { environment_session: session, canvas_id: 3, action_id: 1, comment_id: 2, title: "x", content: "x", parent_id: 1, objective_id: 1, goal_id: 1, strategy_id: 1, indicator_id: 1, goal_report_id: 1, indicator_report_id: 1, at: "2026-01-01", batch_id: BATCH, operations: [{ op: "delete", id: 1 }] })).text);
     outputs.push((await call(tool.name, {})).text);
   }
   for (const text of outputs) assert.ok(!text.includes(OTHER_HOST), text);
@@ -278,38 +278,123 @@ test("no configured environment: select_environment points to the settings", asy
   assert.equal(asked.length, 0);
 });
 
+const BATCH = "0b9e6c2e-1111-4222-8333-444455556666";
+
 const ROUTES = [
   ["list_canvases", {}, "GET", "ogsm_canvases.json?page=1"],
   ["list_teams", {}, "GET", "teams.json?page=1"],
   ["list_users", {}, "GET", "users.json?page=1"],
   ["list_statuses", {}, "GET", "statuses.json?page=1"],
   ["list_actions", { canvas_id: 3 }, "GET", "actions.json?canvas_id=3&page=1"],
-  ["create_action", { canvas_id: 3, title: "A" }, "POST", "actions.json", { ogsm_action: { title: "A", canvas: { id: 3 } } }],
-  ["update_action", { action_id: 5, title: "B" }, "PATCH", "actions/5.json", { ogsm_action: { title: "B" } }],
+  [
+    "create_action",
+    { canvas_id: 3, strategy_id: 402, title: "A", due: "2026-12-31", start: "2026-11-01", list: "doing", priority: "high", effort: 3, added_value: 5, assignee_id: 7, label_ids: ["Q4"] },
+    "POST",
+    "actions.json",
+    {
+      ogsm_action: {
+        title: "A",
+        start: "2026-11-01",
+        due: "2026-12-31",
+        list: "doing",
+        effort: 3,
+        added_value: 5,
+        priority: "high",
+        assignee_id: 7,
+        label_ids: ["Q4"],
+        canvas: { id: 3 },
+        strategy: { id: 402 },
+      },
+    },
+  ],
+  ["update_action", { action_id: 5, title: "B", assignee_id: null }, "PATCH", "actions/5.json", { ogsm_action: { title: "B", assignee_id: null } }],
   ["list_comments", { action_id: 5 }, "GET", "actions/5/comments.json?page=1"],
   ["create_comment", { action_id: 5, content: "<p>x</p>" }, "POST", "actions/5/comments.json", { comment: { content: "<p>x</p>" } }],
   ["update_comment", { action_id: 5, comment_id: 6, content: "y" }, "PATCH", "actions/5/comments/6.json", { comment: { content: "y" } }],
   ["delete_comment", { action_id: 5, comment_id: 6 }, "DELETE", "actions/5/comments/6.json"],
   ["list_objectives", {}, "GET", "objectives.json?page=1"],
-  ["create_objective", { canvas_id: 3, title: "O" }, "POST", "objectives.json", { ogsm_objective: { title: "O", canvas: { id: 3 } } }],
+  [
+    "create_objective",
+    { canvas_id: 12, title: "O", description: "<p>x</p>", assignee_id: 7, label_ids: ["Focus"] },
+    "POST",
+    "objectives.json",
+    { ogsm_objective: { title: "O", description: "<p>x</p>", assignee_id: 7, label_ids: ["Focus"], canvas: { id: 12 } } },
+  ],
   ["update_objective", { objective_id: 7, title: "O2" }, "PATCH", "objectives/7.json", { ogsm_objective: { title: "O2" } }],
   ["list_goals", {}, "GET", "goals.json?page=1"],
-  ["create_goal", { canvas_id: 3, title: "G" }, "POST", "goals.json", { ogsm_goal: { title: "G", canvas: { id: 3 } } }],
+  [
+    "create_goal",
+    { canvas_id: 12, parent_id: 301, title: "Revenue", target_unit: "€", aggregation_method: "sum", chart_type: "quarter_sum", chart_vertical_min: 0 },
+    "POST",
+    "goals.json",
+    { ogsm_goal: { title: "Revenue", target_unit: "€", chart_vertical_min: 0, aggregation_method: "sum", chart_type: "quarter_sum", canvas: { id: 12 }, parent: { id: 301 } } },
+  ],
   ["update_goal", { goal_id: 8, target_unit: "%" }, "PATCH", "goals/8.json", { ogsm_goal: { target_unit: "%" } }],
   ["list_strategies", {}, "GET", "strategies.json?page=1"],
   ["create_strategy", { canvas_id: 3, title: "S" }, "POST", "strategies.json", { ogsm_strategy: { title: "S", canvas: { id: 3 } } }],
-  ["update_strategy", { strategy_id: 9, title: "S2" }, "PATCH", "strategies/9.json", { ogsm_strategy: { title: "S2" } }],
+  ["update_strategy", { strategy_id: 9, label_ids: [] }, "PATCH", "strategies/9.json", { ogsm_strategy: { label_ids: [] } }],
   ["list_indicators", {}, "GET", "indicators.json?page=1"],
   [
     "create_indicator",
-    { canvas_id: 3, title: "I", parent_id: 9 },
+    { canvas_id: 3, title: "I", parent_id: 9, target_unit: "%", aggregation_method: "average" },
     "POST",
     "indicators.json",
-    { ogsm_indicator: { title: "I", canvas: { id: 3 }, parent: { id: 9 } } },
+    { ogsm_indicator: { title: "I", target_unit: "%", aggregation_method: "average", canvas: { id: 3 }, parent: { id: 9 } } },
   ],
   ["update_indicator", { indicator_id: 10, title: "I2" }, "PATCH", "indicators/10.json", { ogsm_indicator: { title: "I2" } }],
+  ["list_objective_reports", {}, "GET", "objective_reports.json?page=1"],
+  ["list_strategy_reports", {}, "GET", "strategy_reports.json?page=1"],
+  ["list_action_reports", {}, "GET", "action_reports.json?page=1"],
   ["list_goal_reports", {}, "GET", "goal_reports.json?page=1"],
   ["list_indicator_reports", {}, "GET", "indicator_reports.json?page=1"],
+  [
+    "create_goal_report",
+    { goal_id: 301, at: "2026-10-31", current_value: 42, target_value: 50, traffic_light: "oranje", show_in_ogsm: false },
+    "POST",
+    "goal_reports.json",
+    { goal_report: { at: "2026-10-31", current_value: 42, target_value: 50, traffic_light: "oranje", show_in_ogsm: false, goal: { id: 301 } } },
+  ],
+  ["update_goal_report", { goal_report_id: 11, traffic_light: "" }, "PATCH", "goal_reports/11.json", { goal_report: { traffic_light: "" } }],
+  ["delete_goal_report", { goal_report_id: 11 }, "DELETE", "goal_reports/11.json"],
+  [
+    "create_goal_report_batch",
+    { operations: [{ op: "create", goal_id: 301, at: "2026-10-31", current_value: 42, traffic_light: "groen" }, { op: "update", id: 9001, current_value: 43 }, { op: "delete", id: 9002 }] },
+    "POST",
+    "goal_report_batches.json",
+    {
+      goal_report_batch: {
+        operations: [
+          { op: "create", goal: { id: 301 }, at: "2026-10-31", current_value: 42, traffic_light: "groen" },
+          { op: "update", id: 9001, current_value: 43 },
+          { op: "delete", id: 9002 },
+        ],
+      },
+    },
+  ],
+  ["get_goal_report_batch", { batch_id: BATCH }, "GET", `goal_report_batches/${BATCH}.json`],
+  [
+    "create_indicator_report",
+    { indicator_id: 402, at: "2026-10-31", current_value: "43,5" },
+    "POST",
+    "indicator_reports.json",
+    { indicator_report: { at: "2026-10-31", current_value: "43,5", indicator: { id: 402 } } },
+  ],
+  [
+    "update_indicator_report",
+    { indicator_report_id: 12, current_value: "43,5", traffic_light: "groen" },
+    "PATCH",
+    "indicator_reports/12.json",
+    { indicator_report: { current_value: "43,5", traffic_light: "groen" } },
+  ],
+  ["delete_indicator_report", { indicator_report_id: 12 }, "DELETE", "indicator_reports/12.json"],
+  [
+    "create_indicator_report_batch",
+    { operations: [{ op: "create", indicator_id: 402, at: "2026-10-31", target_value: null }] },
+    "POST",
+    "indicator_report_batches.json",
+    { indicator_report_batch: { operations: [{ op: "create", indicator: { id: 402 }, at: "2026-10-31", target_value: null }] } },
+  ],
+  ["get_indicator_report_batch", { batch_id: BATCH }, "GET", `indicator_report_batches/${BATCH}.json`],
 ];
 
 test("every API tool sends the expected request", async () => {
@@ -324,6 +409,49 @@ test("every API tool sends the expected request", async () => {
     assert.equal(sent.url, `https://klant.ogsm.online/api/v3/${path}`, name);
     assert.deepEqual(sent.body, body, name);
   }
+});
+
+test("annotations: lists read only, writes not read only, deletes destructive", () => {
+  for (const tool of toolList()) {
+    const { readOnlyHint, destructiveHint } = tool.annotations;
+    if (/^(list_|get_|select_)/.test(tool.name)) assert.equal(readOnlyHint, true, tool.name);
+    else assert.equal(readOnlyHint, false, tool.name);
+    if (/^delete_|_batch$/.test(tool.name) && !tool.name.startsWith("get_")) assert.equal(destructiveHint, true, tool.name);
+    if (/^(create|update)_/.test(tool.name) && !tool.name.endsWith("_batch")) assert.equal(destructiveHint, false, tool.name);
+  }
+});
+
+test("tool descriptions carry the API rules", () => {
+  const byName = Object.fromEntries(toolList().map((t) => [t.name, t]));
+  for (const name of ["create_goal_report", "update_indicator_report", "create_goal_report_batch"]) {
+    assert.match(byName[name].description, /groen\/oranje\/rood, en green\/amber\/red; clear with "" or null, never "leeg"/, name);
+  }
+  for (const name of ["update_objective", "update_goal", "update_strategy", "update_indicator", "update_action"]) {
+    assert.match(byName[name].description, /label_ids replaces the whole set/, name);
+    assert.match(byName[name].description, /can't be moved .* nor deleted/, name);
+    assert.match(byName[name].description, /HTML description back in full/, name);
+    assert.ok(!("canvas_id" in byName[name].inputSchema.properties) && !("parent_id" in byName[name].inputSchema.properties), name);
+  }
+  assert.ok(byName.create_indicator.inputSchema.required.includes("parent_id"));
+  assert.ok(!("parent_id" in byName.create_objective.inputSchema.properties));
+  assert.ok(!("parent_id" in byName.create_strategy.inputSchema.properties));
+  assert.equal(byName.create_goal_report_batch.inputSchema.properties.operations.maxItems, 500);
+});
+
+test("a page parameter returns that one page with its meta", async () => {
+  const { call, calls, select } = await connect();
+  const session = await select();
+  const result = await call("list_goals", { environment_session: session, page: 2, canvas_id: 4 });
+  assert.equal(calls.at(-1).url, "https://klant.ogsm.online/api/v3/goals.json?page=2");
+  assert.deepEqual(result.json.data, { data: [], meta: { next_page: null } });
+  await call("list_actions", { environment_session: session, canvas_id: 3, page: 3 });
+  assert.equal(calls.at(-1).url, "https://klant.ogsm.online/api/v3/actions.json?canvas_id=3&page=3");
+});
+
+test("report lists can filter on their card", async () => {
+  const { call, select } = await connect();
+  const session = await select();
+  assert.equal((await call("list_goal_reports", { environment_session: session, goal_id: 1 })).json.data.length, 0);
 });
 
 test("list tools can filter on a canvas", async () => {

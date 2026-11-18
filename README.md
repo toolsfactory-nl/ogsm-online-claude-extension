@@ -36,7 +36,7 @@ to be installed.
    choose the access and how long it stays valid:
    - **Read only**: Claude can look things up, but cannot change anything.
    - **Read and write**: Claude can also create and update actions, comments,
-     objectives, goals, strategies and indicators.
+     objectives, goals, strategies, indicators and measurements.
 4. Copy the token straight away. It is shown only once; treat it like a password.
 
 A token acts with your own permissions: Claude sees and changes exactly what you
@@ -102,22 +102,39 @@ another environment, **start a new conversation** (a new chat).
 
 ## Tools
 
+> **Note:** the tools for objective, strategy and action reports, measurements
+> (single and batch), the `page` parameter and some card fields use parts of API
+> v3 that are new. They need an environment that runs the latest OGSM.online
+> version; on an older one they answer "not found".
+
 | Tool | What it does |
 | --- | --- |
 | `select_environment` | Let you choose the environment for this conversation |
 | `list_canvases`, `list_teams`, `list_users`, `list_statuses` | Read canvases, teams, users and action statuses |
-| `list_actions`, `create_action`, `update_action` | Actions on a canvas |
-| `list_comments`, `create_comment`, `update_comment`, `delete_comment` | Comments on an action |
-| `list_/create_/update_objective(s)` | Objectives (no parent) |
-| `list_/create_/update_goal(s)` | Goals (`parent_id` of a goal makes a sub goal) |
-| `list_/create_/update_strategy/strategies` | Strategies (no parent) |
-| `list_/create_/update_indicator(s)` | Indicators (`parent_id` of a strategy or indicator is required) |
+| `list_actions`, `create_action`, `update_action` | Actions (`strategy_id` of a strategy or action as parent; `list` sets the status) |
+| `list_comments`, `create_comment`, `update_comment`, `delete_comment` | Comments on a card |
+| `list_objectives`, `create_objective`, `update_objective` | Objectives (no parent) |
+| `list_goals`, `create_goal`, `update_goal` | Goals (`parent_id` of a goal makes a sub goal) |
+| `list_strategies`, `create_strategy`, `update_strategy` | Strategies (no parent) |
+| `list_indicators`, `create_indicator`, `update_indicator` | Indicators (`parent_id` of a strategy or indicator is required) |
+| `list_objective_reports`, `list_strategy_reports`, `list_action_reports` | Reports of objectives, strategies and actions (read only) |
 | `list_goal_reports`, `list_indicator_reports` | Measurements of goals and indicators |
+| `create_/update_/delete_goal_report`, `create_/update_/delete_indicator_report` | Add, change or delete one measurement |
+| `create_goal_report_batch`, `create_indicator_report_batch` | Up to 500 measurement changes in one asynchronous batch |
+| `get_goal_report_batch`, `get_indicator_report_batch` | Status and results of a batch |
 
-Descriptions and comments are HTML; an `<img>` with a base64 data URI as its
-`src` is stored as an attachment. Errors from the API (such as 403
-`read_only_token` or 422 validation errors) are returned to Claude as readable
-messages.
+List tools fetch all pages (1500 records each), or only one with `page`.
+
+- Descriptions and comments are HTML; an `<img>` with a base64 data URI as its
+  `src` is stored as an attachment. When editing, the full HTML is sent back, or
+  attachments are lost.
+- `label_ids` replaces the whole set of labels (`[]` clears them).
+- The canvas and parent are set on create only: a card can't be moved or deleted
+  through the API.
+- Traffic lights are in the language of the environment: `groen`/`oranje`/`rood`
+  (nl) or `green`/`amber`/`red` (en); `""` or `null` clears one.
+- Errors from the API (such as 403 `read_only_token`, 404 or 422 validation
+  errors) are returned to Claude as short readable messages.
 
 ## Development
 
@@ -245,7 +262,35 @@ omgeving werken, **begin dan een nieuw gesprek** (een nieuwe chat).
   `Authorization: Bearer …`, naar `https://<host>/api/v3/…` van de omgeving
   waar ze bij horen, en staan nooit in de uitvoer van een tool.
 
-Zie de Engelse tekst hierboven voor de lijst met tools, ontwikkelen en releasen.
+### Tools
+
+> **Let op:** de tools voor rapportages van ambities, strategieën en acties,
+> metingen (los en in batches), de parameter `page` en een deel van de
+> kaartvelden gebruiken nieuwe delen van API v3. Daarvoor moet de omgeving de
+> nieuwste versie van OGSM.online draaien; een oudere geeft "not found".
+
+| Tool | Wat hij doet |
+| --- | --- |
+| `select_environment` | Laat je de omgeving voor dit gesprek kiezen |
+| `list_canvases`, `list_teams`, `list_users`, `list_statuses` | Canvassen, teams, gebruikers en actiestatussen lezen |
+| `list_actions`, `create_action`, `update_action` | Acties (`strategy_id` van een strategie of actie als ouder; `list` zet de status) |
+| `list_comments`, `create_comment`, `update_comment`, `delete_comment` | Reacties op een kaart |
+| `list_objectives`, `create_objective`, `update_objective` | Ambities (geen ouder) |
+| `list_goals`, `create_goal`, `update_goal` | Doelstellingen (`parent_id` van een doelstelling maakt een subdoelstelling) |
+| `list_strategies`, `create_strategy`, `update_strategy` | Strategieën (geen ouder) |
+| `list_indicators`, `create_indicator`, `update_indicator` | Indicatoren (`parent_id` van een strategie of indicator is verplicht) |
+| `list_objective_reports`, `list_strategy_reports`, `list_action_reports` | Rapportages van ambities, strategieën en acties (alleen lezen) |
+| `list_goal_reports`, `list_indicator_reports` | Metingen van doelstellingen en indicatoren |
+| `create_/update_/delete_goal_report`, `create_/update_/delete_indicator_report` | Eén meting toevoegen, wijzigen of verwijderen |
+| `create_goal_report_batch`, `create_indicator_report_batch` | Tot 500 metingwijzigingen in één asynchrone batch |
+| `get_goal_report_batch`, `get_indicator_report_batch` | Status en resultaten van een batch |
+
+`label_ids` vervangt alle labels; een kaart verplaatsen of verwijderen kan niet
+via de API. Stoplichten volgen de taal van de omgeving (`groen`/`oranje`/`rood`
+of `green`/`amber`/`red`); `""` of `null` wist er een. HTML-tekst stuur je bij
+bewerken volledig terug, anders gaan bijlagen verloren.
+
+Zie de Engelse tekst hierboven voor ontwikkelen en releasen.
 
 ## License
 

@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "ogsm-online",
   "display_name": "OGSM.online",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Work with your OGSM.online plans, actions and comments from Claude, in one environment per conversation.",
-  "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure your OGSM.online environments (host + personal API token) in the extension settings. At the start of a conversation Claude asks which environment you mean and you type its host (or choose it in a picker where the app offers one); Claude never sees the list of configured environments, only learns the one you chose and works in it for the whole conversation. To work in another environment, start a new conversation. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies and indicators.",
+  "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure your OGSM.online environments (host + personal API token) in the extension settings. At the start of a conversation Claude asks which environment you mean and you type its host (or choose it in a picker where the app offers one); Claude never sees the list of configured environments, only learns the one you chose and works in it for the whole conversation. To work in another environment, start a new conversation. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies, indicators and measurements.",
   "author": {
     "name": "Toolsfactory",
     "url": "https://ogsm.online"
@@ -209,7 +209,7 @@
     },
     {
       "name": "list_canvases",
-      "description": "List the OGSM canvases the user can see, with their team id and status."
+      "description": "List the OGSM canvases the user can see, with their team id and status (draft, active, archived)."
     },
     {
       "name": "list_teams",
@@ -221,35 +221,35 @@
     },
     {
       "name": "list_statuses",
-      "description": "List the statuses an action can have, in board column order."
+      "description": "List the statuses an action can have (id, name, base list), for the list field of an action."
     },
     {
       "name": "list_actions",
-      "description": "List the actions on a canvas."
+      "description": "List the actions visible to the user, optionally only those on one canvas."
     },
     {
       "name": "create_action",
-      "description": "Create an action on a canvas, optionally under a strategy (or under another action). Needs a read and write token."
+      "description": "Create an action on a canvas, optionally under a strategy (or under another action). The canvas and strategy can't be changed later. Progress, involved, recurring and custom fields can't be set. Needs a read and write token."
     },
     {
       "name": "update_action",
-      "description": "Update an action. Only the fields passed are changed. Needs a read and write token."
+      "description": "Update an action; only the fields passed change. label_ids replaces the whole set; send an HTML description back in full. A card can't be moved to another canvas or parent, nor deleted, via the API. Needs a read and write token."
     },
     {
       "name": "list_comments",
-      "description": "List the comments on an action."
+      "description": "List the comments on a card."
     },
     {
       "name": "create_comment",
-      "description": "Add a comment to an action. Needs a read and write token."
+      "description": "Add a comment to a card. Needs a read and write token."
     },
     {
       "name": "update_comment",
-      "description": "Change the content of a comment on an action. Needs a read and write token."
+      "description": "Replace the content of a comment (own comment, or any as tenant admin); send the full HTML. Needs a read and write token."
     },
     {
       "name": "delete_comment",
-      "description": "Delete one of the user's own comments on an action. Needs a read and write token."
+      "description": "Delete one of the user's own comments on a card. Needs a read and write token."
     },
     {
       "name": "list_objectives",
@@ -257,11 +257,11 @@
     },
     {
       "name": "create_objective",
-      "description": "Create an objective on a canvas. An objective stands on the OGSM itself and takes no parent. Needs a read and write token."
+      "description": "Create an objective on a canvas. An objective takes no parent. The canvas and parent can't be changed later. Needs a read and write token."
     },
     {
       "name": "update_objective",
-      "description": "Update an objective. Only the fields passed are changed. Needs a read and write token."
+      "description": "Update an objective; only the fields passed change. label_ids replaces the whole set; send an HTML description back in full. A card can't be moved to another canvas or parent, nor deleted, via the API. Needs a read and write token."
     },
     {
       "name": "list_goals",
@@ -269,11 +269,11 @@
     },
     {
       "name": "create_goal",
-      "description": "Create a goal on a canvas. Pass parent_id (a goal on the same canvas) to make it a sub goal. Needs a read and write token."
+      "description": "Create a goal on a canvas. Optional parent_id: a goal on the same canvas, for a sub goal. The canvas and parent can't be changed later. Needs a read and write token."
     },
     {
       "name": "update_goal",
-      "description": "Update a goal. Only the fields passed are changed. Needs a read and write token."
+      "description": "Update a goal; only the fields passed change. label_ids replaces the whole set; send an HTML description back in full. A card can't be moved to another canvas or parent, nor deleted, via the API. Needs a read and write token."
     },
     {
       "name": "list_strategies",
@@ -281,11 +281,11 @@
     },
     {
       "name": "create_strategy",
-      "description": "Create a strategy on a canvas. A strategy stands on the OGSM itself and takes no parent. Needs a read and write token."
+      "description": "Create a strategy on a canvas. A strategy takes no parent. The canvas and parent can't be changed later. Needs a read and write token."
     },
     {
       "name": "update_strategy",
-      "description": "Update a strategy. Only the fields passed are changed. Needs a read and write token."
+      "description": "Update a strategy; only the fields passed change. label_ids replaces the whole set; send an HTML description back in full. A card can't be moved to another canvas or parent, nor deleted, via the API. Needs a read and write token."
     },
     {
       "name": "list_indicators",
@@ -293,19 +293,71 @@
     },
     {
       "name": "create_indicator",
-      "description": "Create an indicator on a canvas. parent_id is required: a strategy on the same canvas, or an indicator there for a sub indicator. Needs a read and write token."
+      "description": "Create an indicator on a canvas. parent_id is required: a strategy on the same canvas, or an indicator there for a sub indicator. The canvas and parent can't be changed later. Needs a read and write token."
     },
     {
       "name": "update_indicator",
-      "description": "Update an indicator. Only the fields passed are changed. Needs a read and write token."
+      "description": "Update an indicator; only the fields passed change. label_ids replaces the whole set; send an HTML description back in full. A card can't be moved to another canvas or parent, nor deleted, via the API. Needs a read and write token."
+    },
+    {
+      "name": "list_objective_reports",
+      "description": "List the objective reports (traffic light, description and decision; kind current, aggregation, impose_down, imposed or target), optionally of one objective. Values and traffic lights are in the language of the environment."
+    },
+    {
+      "name": "list_strategy_reports",
+      "description": "List the strategy reports (traffic light, description and decision; kind current, aggregation, impose_down, imposed or target), optionally of one strategy. Values and traffic lights are in the language of the environment."
+    },
+    {
+      "name": "list_action_reports",
+      "description": "List the action reports (traffic light, progress, status, used budgets, description and decision; kind current, aggregation, impose_down, imposed or target), optionally of one action. Values and traffic lights are in the language of the environment."
     },
     {
       "name": "list_goal_reports",
-      "description": "List the measurements (reports) of goals, optionally of one goal."
+      "description": "List the goal reports (current and target value, traffic light, show_in_ogsm, description and decision; kind current, aggregation, impose_down, imposed or target), optionally of one goal. Values and traffic lights are in the language of the environment."
     },
     {
       "name": "list_indicator_reports",
-      "description": "List the measurements (reports) of indicators, optionally of one indicator."
+      "description": "List the indicator reports (current and target value, traffic light, show_in_ogsm, description and decision; kind current, aggregation, impose_down, imposed or target), optionally of one indicator. Values and traffic lights are in the language of the environment."
+    },
+    {
+      "name": "create_goal_report",
+      "description": "Add a measurement to a goal. at is required; description, decision and kind can't be set. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "update_goal_report",
+      "description": "Change a measurement of a goal; only the fields passed change. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "delete_goal_report",
+      "description": "Delete a measurement of a goal. Needs a read and write token."
+    },
+    {
+      "name": "create_goal_report_batch",
+      "description": "Create, update and delete up to 500 goal measurements in one asynchronous batch. Each operation: op create (goal_id, at, values), update (id, values) or delete (id). Returns the queued batch; poll get_goal_report_batch for the per-operation results. At most 5 batches per 5 minutes. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "get_goal_report_batch",
+      "description": "Get the status (queued, processing, completed, failed) and per-operation results of one of the user's goal report batches."
+    },
+    {
+      "name": "create_indicator_report",
+      "description": "Add a measurement to an indicator. at is required; description, decision and kind can't be set. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "update_indicator_report",
+      "description": "Change a measurement of an indicator; only the fields passed change. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "delete_indicator_report",
+      "description": "Delete a measurement of an indicator. Needs a read and write token."
+    },
+    {
+      "name": "create_indicator_report_batch",
+      "description": "Create, update and delete up to 500 indicator measurements in one asynchronous batch. Each operation: op create (indicator_id, at, values), update (id, values) or delete (id). Returns the queued batch; poll get_indicator_report_batch for the per-operation results. At most 5 batches per 5 minutes. traffic_light: nl groen/oranje/rood, en green/amber/red; clear with \"\" or null, never \"leeg\". Needs a read and write token."
+    },
+    {
+      "name": "get_indicator_report_batch",
+      "description": "Get the status (queued, processing, completed, failed) and per-operation results of one of the user's indicator report batches."
     }
   ]
 }
