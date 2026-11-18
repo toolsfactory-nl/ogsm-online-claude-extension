@@ -18,10 +18,10 @@ comments and measurements.
    after installing; switch it on under **Settings → Extensions** (called
    **Connectors** in some versions).
 
-Claude Desktop does not show a picker (MCP form *elicitation*) to local
-extensions. Then Claude asks you in the chat which environment you mean, and you
-type its host, e.g. `klant.ogsm.online` (see below). Where the app can show a
-picker, you choose in the picker instead.
+At the start of a conversation Claude simply asks: "Which OGSM.online
+environment do you want to work in?" You answer with the address you open
+OGSM.online on, e.g. `klant.ogsm.online` (see below). Where the app can show a
+picker (MCP form *elicitation*), you choose there instead.
 
 Claude Desktop runs the extension with its built-in Node.js; nothing else needs
 to be installed.
@@ -56,11 +56,14 @@ Fill as many slots as you need and leave the rest empty. Slot 1 is required.
 
 ## One environment per conversation
 
-A conversation is about one environment. At the start, Claude asks you in which
-OGSM.online environment you want to work, and you type its host as you know it
-(e.g. `klant.ogsm.online`; `https://` and a trailing `/` may be included). It
-is only accepted when it matches a configured environment exactly; otherwise
-you are asked to check it, without any configured host being named. Where the
+A conversation is about one environment. At the start, Claude asks one short
+question, in your language: "Which OGSM.online environment do you want to work
+in?" (in Dutch: "In welke OGSM.online-omgeving wil je werken?"), without any
+further explanation. You type the address as you know it (e.g.
+`klant.ogsm.online`; `https://` and a trailing `/` may be included). It is only
+accepted when it matches a configured environment exactly; otherwise Claude
+asks again, at most with one generic example (`company.ogsm.online`), and never
+names a configured host. Where the
 app supports MCP form elicitation, it shows you a picker with your configured
 environments (no default) instead. Claude then works in the chosen environment
 for the whole conversation. To work in
@@ -78,8 +81,8 @@ another environment, **start a new conversation** (a new chat).
     environment is selected;
   - `select_environment` always asks you, even when only one environment is
     configured, and never picks one itself. Without a picker it tells Claude to
-    ask you and to pass on exactly what you typed, without suggesting or
-    guessing a host. A typed host is only accepted on an exact match (ignoring
+    ask you one short question and to pass on exactly what you typed, without
+    suggesting or guessing a host. A typed host is only accepted on an exact match (ignoring
     case, `https://` and a trailing `/`); the refusal names no configured host,
     and after 5 misses in 10 minutes further attempts are refused for a while,
     so the configured hosts cannot be probed. With a picker, a host from Claude
@@ -158,10 +161,10 @@ metingen.
    installeren uitgeschakeld laten; zet haar aan via **Instellingen →
    Extensies** (in sommige versies **Connectors**).
 
-Claude Desktop toont lokale extensies geen keuzelijst (MCP-formulier-
-*elicitation*). Dan vraagt Claude je in de chat welke omgeving je bedoelt, en
-typ je de host, bijvoorbeeld `klant.ogsm.online` (zie hieronder). Waar de app
-wel een keuzelijst kan tonen, kies je in die keuzelijst.
+Aan het begin van een gesprek vraagt Claude gewoon: "In welke
+OGSM.online-omgeving wil je werken?" Je antwoordt met het adres waarop je
+OGSM.online opent, bijvoorbeeld `klant.ogsm.online` (zie hieronder). Waar de app
+een keuzelijst kan tonen (MCP-formulier-*elicitation*), kies je daar.
 
 Claude Desktop draait de extensie met de ingebouwde Node.js; je hoeft verder
 niets te installeren.
@@ -196,12 +199,13 @@ Vul zoveel plekken in als je nodig hebt en laat de rest leeg. Plek 1 is verplich
 
 ### Eén omgeving per gesprek
 
-Een gesprek gaat over één omgeving. Aan het begin vraagt Claude in welke
-OGSM.online-omgeving je wilt werken, en typ je de host zoals jij die kent
-(bijvoorbeeld `klant.ogsm.online`; `https://` en een `/` aan het eind mogen
-erbij). Die wordt alleen geaccepteerd als hij precies overeenkomt met een
-ingestelde omgeving; anders word je gevraagd hem te controleren, zonder dat er
-een ingestelde host genoemd wordt. Ondersteunt de app MCP-formulier-elicitation,
+Een gesprek gaat over één omgeving. Aan het begin stelt Claude één korte vraag,
+in jouw taal: "In welke OGSM.online-omgeving wil je werken?", zonder verdere
+uitleg. Je typt het adres zoals jij het kent (bijvoorbeeld `klant.ogsm.online`;
+`https://` en een `/` aan het eind mogen erbij). Dat wordt alleen geaccepteerd
+als het precies overeenkomt met een ingestelde omgeving; anders vraagt Claude
+het nog eens, hooguit met één algemeen voorbeeld (`bedrijf.ogsm.online`), en
+noemt nooit een ingestelde host. Ondersteunt de app MCP-formulier-elicitation,
 dan toont die je in plaats daarvan een keuzelijst met je ingestelde omgevingen
 (zonder standaardwaarde). Claude werkt daarna het hele gesprek in de gekozen
 omgeving. Wil je in een andere
@@ -220,7 +224,8 @@ omgeving werken, **begin dan een nieuw gesprek** (een nieuwe chat).
     gekozen;
   - `select_environment` vraagt het altijd aan jou, ook als er maar één
     omgeving is ingesteld, en kiest nooit zelf. Zonder keuzelijst zegt het
-    Claude dat het jou moet vragen en precies moet doorgeven wat jij typte,
+    Claude dat het jou één korte vraag moet stellen en precies moet doorgeven
+    wat jij typte,
     zonder een host voor te stellen of te raden. Een getypte host wordt alleen
     geaccepteerd als hij precies overeenkomt (hoofdletters, `https://` en een
     `/` aan het eind tellen niet mee); de weigering noemt geen ingestelde host,

@@ -144,8 +144,10 @@ export class EnvironmentGate {
     if (!environment) {
       this.misses.push(this.now());
       throw new EnvironmentNotSelectedError(
-        "That host is not one of the OGSM.online environments set up in this extension. Ask the user to check " +
-          "the host name and type it again. Do not suggest or guess a host yourself."
+        "That is not one of the OGSM.online environments set up in this extension. Ask the user once more, " +
+          "briefly and in their language, which OGSM.online environment they want to work in; you may add this " +
+          "one example only: \"bijvoorbeeld bedrijf.ogsm.online\" (in English: \"for example " +
+          "company.ogsm.online\"). Do not explain or apologise, and do not suggest or guess a host yourself."
       );
     }
     return this.select(environment.host);

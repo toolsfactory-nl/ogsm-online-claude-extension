@@ -326,14 +326,14 @@ export const API_TOOLS = [
 
 export const SERVER_INSTRUCTIONS = `This server works with one OGSM.online environment per conversation. Before any other
 tool, call select_environment with environment_session null. The user then chooses the environment, either in a
-form of their own or, when that form is not available, by typing its host name in reply to your question. You do
-not know which environments exist and you never choose one: when select_environment asks you to, ask the user
-which environment they mean and pass on literally what they typed, without suggesting, guessing or completing a
-host name. You get back only the chosen environment and an environment_session. Pass that environment_session to
-every other tool. Work only in the selected environment for the whole conversation. Never mention, suggest,
-guess or compare any other environment, and never offer to repeat work elsewhere. Never reuse an
-environment_session or a host name from another conversation. If the user wants another environment, tell them to
-start a new conversation.`;
+form of their own or by answering your question. You do not know which environments exist and you never choose one:
+when select_environment asks you to, ask the user one short question in their language, such as "In welke
+OGSM.online-omgeving wil je werken?", with no explanation, apology or technical detail, and pass on literally what
+they typed, without suggesting, guessing or completing a host name. You get back only the chosen environment and an
+environment_session. Pass that environment_session to every other tool. Work only in the selected environment for
+the whole conversation. Never mention, suggest, guess or compare any other environment, and never offer to repeat
+work elsewhere. Never reuse an environment_session or a host name from another conversation. If the user wants
+another environment, tell them to start a new conversation.`;
 
 const GATE_TOOLS = [
   {
@@ -341,8 +341,10 @@ const GATE_TOOLS = [
     description:
       "Let the user choose the OGSM.online environment for this conversation. Pass environment_session null the " +
       "first time, without host. The user then picks the environment in a form of their own, or, if that form is " +
-      "not available, the result tells you to ask the user: then ask, wait for their answer and call again with " +
-      "host set to exactly what they typed. You do not see the options and never choose or suggest one. If this " +
+      "not available, the result tells you to ask the user: then ask one short question in their language (e.g. " +
+      "\"In welke OGSM.online-omgeving wil je werken?\") without explaining why, wait for their answer and call " +
+      "again with host set to exactly what they typed. You do not see the options and never choose or suggest " +
+      "one. If this " +
       "conversation already has an environment_session, pass it (it is then refused, as a conversation works in " +
       "one environment only). Returns the chosen environment and the environment_session for every other tool.",
     annotations: { readOnlyHint: true },
@@ -387,12 +389,12 @@ function fail(message) {
 export const NEW_CONVERSATION = "Start a new conversation to work with another environment.";
 
 export const ASK_USER =
-  "No OGSM.online environment is selected yet, and this app cannot show the environment picker. Ask the user, " +
-  "in your next message, which OGSM.online environment they want to work in in this conversation, by its host " +
-  "name as they know it (the address they open OGSM.online on, without https://). Only ask: do not suggest, " +
-  "guess, list or complete a host name, and do not use one from another conversation. When the user has " +
-  "answered, call select_environment again with environment_session null and host set to exactly what the user " +
-  "typed.";
+  "No OGSM.online environment is selected yet. In your next message, ask the user only this one short question, " +
+  "in their language, e.g. \"In welke OGSM.online-omgeving wil je werken?\" or \"Which OGSM.online environment " +
+  "do you want to work in?\" Say nothing else about it: no explanation, no apology, and do not mention a " +
+  "picker, form, host name or https://. Do not suggest, guess, list or complete a host name, give no example, " +
+  "and do not use one from another conversation. When the user has answered, call select_environment again " +
+  "with environment_session null and host set to exactly what the user typed.";
 
 // Dispatches one tool call. `pick(names)` asks the user to choose in a form (MCP elicitation)
 // and resolves to { host } or { problem }; `canPick()` tells whether that form is available.
