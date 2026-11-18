@@ -79,8 +79,10 @@ test("there is no tool that lists environments, and no tool text names a host or
 test("instructions tell Claude to ask and pass on literally what the user typed", async () => {
   const { client } = await connect();
   const instructions = client.getInstructions();
-  assert.match(instructions, /ask the user\s+which environment they mean/);
-  assert.match(instructions, /without suggesting, guessing or completing a\s+host name/);
+  assert.match(instructions, /without suggesting, guessing or completing a host name/);
+  assert.match(instructions, /one short question in their language/);
+  assert.match(instructions, /In welke\s+OGSM.online-omgeving wil je werken\?/);
+  assert.match(instructions, /no explanation, apology or technical detail/);
 });
 
 test("with the picker, a host from Claude is refused and nobody is asked", async () => {
@@ -150,9 +152,13 @@ for (const [label, elicitation] of [
     assert.ok(!result.isError, result.text);
     assert.equal(result.json.environment, null);
     assert.equal(result.json.environment_session, null);
-    assert.match(result.json.next_step, /Ask the user/);
-    assert.match(result.json.next_step, /do not suggest,\s+guess, list or complete a host name/);
-    assert.match(result.json.next_step, /exactly what the user\s+typed/);
+    const step = result.json.next_step;
+    assert.match(step, /ask the user only this one short question,\s+in their language/);
+    assert.match(step, /In welke OGSM.online-omgeving wil je werken\?/);
+    assert.match(step, /no explanation, no apology, and do not mention a\s+picker, form, host name or https:\/\//);
+    assert.match(step, /Do not suggest, guess, list or complete a host name, give no example/);
+    assert.match(step, /exactly what the user typed/);
+    assert.doesNotMatch(step, /cannot show|keuzelijst|hostnaam|without https/i);
     assert.ok(!result.text.includes("klant.ogsm.online") && !result.text.includes(OTHER_HOST));
     assert.doesNotMatch(result.text, /update Claude Desktop/);
     assert.equal(asked.length, 0);
@@ -180,7 +186,8 @@ test("without the picker, a host that does not match is refused without naming a
     const result = await call("select_environment", { environment_session: null, host: typed });
     assert.ok(result.isError, typed);
     assert.match(result.text, /not one of the OGSM.online environments/);
-    assert.match(result.text, /Do not suggest or guess a host/);
+    assert.match(result.text, /bijvoorbeeld bedrijf\.ogsm\.online/);
+    assert.match(result.text, /Do not explain or apologise, and do not suggest or guess a host/);
     assert.ok(!result.text.includes("klant.ogsm.online") && !result.text.includes(OTHER_HOST), result.text);
     assert.equal(calls.length, 0);
   }
@@ -214,7 +221,7 @@ test("a picker that fails falls back to asking the user", async () => {
     },
   });
   const first = await call("select_environment", { environment_session: null });
-  assert.match(first.json.next_step, /Ask the user/);
+  assert.match(first.json.next_step, /ask the user only this one short question/);
   const selected = await call("select_environment", { environment_session: null, host: OTHER_HOST });
   assert.equal(selected.json.environment, OTHER_HOST);
 });
