@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "ogsm-online",
   "display_name": "OGSM.online",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Work with your OGSM.online plans, actions and comments from Claude, in one environment per conversation.",
-  "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure your OGSM.online environments (host + personal API token) in the extension settings. At the start of a conversation you choose the environment in a picker; Claude only learns the environment you chose and works in it for the whole conversation. To work in another environment, start a new conversation. Requires a Claude Desktop version that supports MCP elicitation. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies and indicators.",
+  "long_description": "Connects Claude to the OGSM.online API v3 with your personal API tokens. Configure your OGSM.online environments (host + personal API token) in the extension settings. At the start of a conversation Claude asks which environment you mean and you type its host (or choose it in a picker where the app offers one); Claude never sees the list of configured environments, only learns the one you chose and works in it for the whole conversation. To work in another environment, start a new conversation. Read only tokens can only read; read and write tokens can also create and update actions, comments, objectives, goals, strategies and indicators.",
   "author": {
     "name": "Toolsfactory",
     "url": "https://ogsm.online"
@@ -205,7 +205,7 @@
   "tools": [
     {
       "name": "select_environment",
-      "description": "Let the user choose the OGSM.online environment for this conversation. The user picks it in a form of their own; you do not name or see the options. Pass environment_session null the first time; if this conversation already has an environment_session, pass it (it is then refused, as a conversation works in one environment only). Returns the chosen environment and the environment_session for every other tool."
+      "description": "Let the user choose the OGSM.online environment for this conversation. Pass environment_session null the first time, without host. The user then picks the environment in a form of their own, or, if that form is not available, the result tells you to ask the user: then ask, wait for their answer and call again with host set to exactly what they typed. You do not see the options and never choose or suggest one. If this conversation already has an environment_session, pass it (it is then refused, as a conversation works in one environment only). Returns the chosen environment and the environment_session for every other tool."
     },
     {
       "name": "list_canvases",

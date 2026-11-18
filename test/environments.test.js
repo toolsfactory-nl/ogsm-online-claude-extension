@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EnvironmentGate, loadEnvironments, normaliseHost } from "../server/environments.js";
+import { EnvironmentGate, exactHost, loadEnvironments, normaliseHost } from "../server/environments.js";
 
 const TOKEN_A = "test-token-aaaa";
 const TOKEN_B = "test-token-bbbb";
@@ -118,4 +118,28 @@ test("an idle selection expires", () => {
   assert.equal(g.require(key).host, "klant.ogsm.online", "use extends the selection");
   now = 3000;
   assert.throws(() => g.require(key), /No OGSM.online environment is selected/);
+});
+
+test("exactHost only tidies case, spaces, the scheme and one trailing slash", () => {
+  assert.equal(exactHost(" HTTPS://Klant.ogsm.online/ "), "klant.ogsm.online");
+  assert.equal(exactHost("localhost:8350"), "localhost:8350");
+  for (const value of ["klant.ogsm.online/teams", "klant.ogsm.online?x=1", "klant ogsm", "", undefined, 3]) {
+    assert.equal(exactHost(value), null, String(value));
+  }
+});
+
+test("selectTyped accepts an exact host only, and throttles misses", () => {
+  let now = 0;
+  const { environments } = loadEnvironments({
+    OGSM_ENV_1_HOST: "klant.ogsm.online",
+    OGSM_ENV_1_TOKEN: TOKEN_A,
+  });
+  const g = new EnvironmentGate(environments, { now: () => now, maxMisses: 2, missWindowMs: 1000 });
+  assert.equal(g.selectTyped("Klant.ogsm.online").environment.host, "klant.ogsm.online");
+  for (const miss of ["klant", "klant.ogsm.online.evil.com"]) {
+    assert.throws(() => g.selectTyped(miss), (e) => /not one of/.test(e.message) && !/klant/.test(e.message));
+  }
+  assert.throws(() => g.selectTyped("klant.ogsm.online"), /Too many host names/);
+  now = 1001;
+  assert.equal(g.selectTyped("klant.ogsm.online").environment.host, "klant.ogsm.online");
 });
