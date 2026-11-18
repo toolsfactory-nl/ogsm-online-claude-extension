@@ -69,6 +69,15 @@ export function loadEnvironments(env = process.env, slots = SLOT_COUNT) {
   return { environments, problems };
 }
 
+// The host exactly as typed, made comparable with a configured host: lower case, without
+// surrounding spaces, an http(s):// prefix or one trailing slash. Anything else (a path, a
+// query, spaces inside) makes it no host at all.
+export function exactHost(input) {
+  if (typeof input !== "string") return null;
+  const host = input.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return /^[a-z0-9.-]+(:\d+)?$/.test(host) ? host : null;
+}
+
 export class EnvironmentNotSelectedError extends Error {}
 
 // The MCP server process lives as long as Claude Desktop runs and is shared by every
@@ -79,11 +88,17 @@ export class EnvironmentNotSelectedError extends Error {}
 // ask) again. A conversation works in one environment only: select_environment refuses while
 // the key it is given is still valid.
 export class EnvironmentGate {
-  constructor(environments, { now = () => Date.now(), ttlMs = 12 * 60 * 60 * 1000 } = {}) {
+  constructor(
+    environments,
+    { now = () => Date.now(), ttlMs = 12 * 60 * 60 * 1000, maxMisses = 5, missWindowMs = 10 * 60 * 1000 } = {}
+  ) {
     this.environments = environments;
     this.now = now;
     this.ttlMs = ttlMs;
     this.sessions = new Map();
+    this.maxMisses = maxMisses;
+    this.missWindowMs = missWindowMs;
+    this.misses = [];
   }
 
   names() {
@@ -109,6 +124,36 @@ export class EnvironmentGate {
     const key = randomBytes(12).toString("base64url");
     this.sessions.set(key, { host: environment.host, expiresAt: this.now() + this.ttlMs });
     return { key, environment };
+  }
+
+  // For clients without an environment picker: the user types the host as they know it and
+  // Claude passes it on. Only an exact match is accepted (ignoring case, surrounding spaces, an
+  // http(s):// prefix and one trailing slash), so a near miss or a guess never lands in some
+  // configured environment. Errors never name a configured host. Misses are throttled, so the
+  // tool cannot be used to probe which hosts are configured.
+  selectTyped(input) {
+    this.pruneMisses();
+    if (this.misses.length >= this.maxMisses) {
+      throw new EnvironmentNotSelectedError(
+        "Too many host names were tried that are not configured. Ask the user to check the host name in the " +
+          "extension settings and to try again in a few minutes."
+      );
+    }
+    const typed = exactHost(input);
+    const environment = typed && this.environments.find((e) => e.host === typed);
+    if (!environment) {
+      this.misses.push(this.now());
+      throw new EnvironmentNotSelectedError(
+        "That host is not one of the OGSM.online environments set up in this extension. Ask the user to check " +
+          "the host name and type it again. Do not suggest or guess a host yourself."
+      );
+    }
+    return this.select(environment.host);
+  }
+
+  pruneMisses() {
+    const since = this.now() - this.missWindowMs;
+    this.misses = this.misses.filter((at) => at > since);
   }
 
   // Returns the environment bound to a still valid key, or null. Does not extend the key.

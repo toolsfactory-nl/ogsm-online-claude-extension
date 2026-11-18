@@ -325,19 +325,24 @@ export const API_TOOLS = [
 ];
 
 export const SERVER_INSTRUCTIONS = `This server works with one OGSM.online environment per conversation. Before any other
-tool, call select_environment with environment_session null: the user then chooses the environment in a form of
-their own, and you get back only that environment and an environment_session. Pass that environment_session to
+tool, call select_environment with environment_session null. The user then chooses the environment, either in a
+form of their own or, when that form is not available, by typing its host name in reply to your question. You do
+not know which environments exist and you never choose one: when select_environment asks you to, ask the user
+which environment they mean and pass on literally what they typed, without suggesting, guessing or completing a
+host name. You get back only the chosen environment and an environment_session. Pass that environment_session to
 every other tool. Work only in the selected environment for the whole conversation. Never mention, suggest,
 guess or compare any other environment, and never offer to repeat work elsewhere. Never reuse an
-environment_session from another conversation. If the user wants another environment, tell them to start a new
-conversation.`;
+environment_session or a host name from another conversation. If the user wants another environment, tell them to
+start a new conversation.`;
 
 const GATE_TOOLS = [
   {
     name: "select_environment",
     description:
-      "Let the user choose the OGSM.online environment for this conversation. The user picks it in a form of " +
-      "their own; you do not name or see the options. Pass environment_session null the first time; if this " +
+      "Let the user choose the OGSM.online environment for this conversation. Pass environment_session null the " +
+      "first time, without host. The user then picks the environment in a form of their own, or, if that form is " +
+      "not available, the result tells you to ask the user: then ask, wait for their answer and call again with " +
+      "host set to exactly what they typed. You do not see the options and never choose or suggest one. If this " +
       "conversation already has an environment_session, pass it (it is then refused, as a conversation works in " +
       "one environment only). Returns the chosen environment and the environment_session for every other tool.",
     annotations: { readOnlyHint: true },
@@ -347,6 +352,13 @@ const GATE_TOOLS = [
         [SESSION_PARAM]: {
           type: ["string", "null"],
           description: "The environment_session this conversation already has, or null when it has none.",
+        },
+        host: {
+          type: "string",
+          description:
+            "Only after select_environment told you to ask the user: the host name exactly as the user typed it " +
+            "in this conversation in reply to your question. Never a host you suggested, guessed, completed or " +
+            "remember from elsewhere. Leave it out otherwise.",
         },
       },
       required: [SESSION_PARAM],
@@ -374,12 +386,21 @@ function fail(message) {
 
 export const NEW_CONVERSATION = "Start a new conversation to work with another environment.";
 
-// Dispatches one tool call. `pick(names)` asks the user to choose (MCP elicitation) and resolves
-// to { host } or { problem }. The model never sees the configured hosts.
-export async function callTool(name, args = {}, { gate, fetch, pick } = {}) {
+export const ASK_USER =
+  "No OGSM.online environment is selected yet, and this app cannot show the environment picker. Ask the user, " +
+  "in your next message, which OGSM.online environment they want to work in in this conversation, by its host " +
+  "name as they know it (the address they open OGSM.online on, without https://). Only ask: do not suggest, " +
+  "guess, list or complete a host name, and do not use one from another conversation. When the user has " +
+  "answered, call select_environment again with environment_session null and host set to exactly what the user " +
+  "typed.";
+
+// Dispatches one tool call. `pick(names)` asks the user to choose in a form (MCP elicitation)
+// and resolves to { host } or { problem }; `canPick()` tells whether that form is available.
+// The model never sees the configured hosts.
+export async function callTool(name, args = {}, { gate, fetch, pick, canPick } = {}) {
   args = args || {};
   try {
-    if (name === "select_environment") return await selectEnvironment(args, { gate, pick });
+    if (name === "select_environment") return await selectEnvironment(args, { gate, pick, canPick });
     const tool = API_TOOLS.find((t) => t.name === name);
     if (!tool) return fail(`Unknown tool: ${name}`);
     const environment = gate.require(args[SESSION_PARAM]);
@@ -392,42 +413,49 @@ export async function callTool(name, args = {}, { gate, fetch, pick } = {}) {
   }
 }
 
-async function selectEnvironment(args, { gate, pick }) {
-  const extra = Object.keys(args).filter((key) => key !== SESSION_PARAM);
-  if (extra.length || !(SESSION_PARAM in args)) {
+function selected({ key, environment }) {
+  return ok({
+    environment: environment.host,
+    [SESSION_PARAM]: key,
+    note: "Pass this environment_session to every other tool. Work only in this environment for the rest of this conversation.",
+  });
+}
+
+async function selectEnvironment(args, { gate, pick, canPick }) {
+  const extra = Object.keys(args).filter((key) => key !== SESSION_PARAM && key !== "host");
+  const typed = args.host;
+  if (extra.length || !(SESSION_PARAM in args) || (typed !== undefined && typeof typed !== "string")) {
     return fail(
-      "select_environment takes only environment_session: null when this conversation has none yet, otherwise " +
-        "the one it has. The user chooses the environment."
+      "select_environment takes environment_session (null when this conversation has none yet, otherwise the " +
+        "one it has) and, only when it asked you to, host as the user typed it. The user chooses the environment."
     );
   }
   const existing = gate.current(args[SESSION_PARAM]);
   if (existing) {
     return fail(`This conversation already works in ${existing.host}; it works in one environment only. ${NEW_CONVERSATION}`);
   }
-  const names = gate.names();
-  if (names.length === 0) {
+  if (gate.names().length === 0) {
     return fail(
       "No OGSM.online environment is configured. Ask the user to add a host and personal API token in the " +
         "extension settings (Settings → Extensions)."
     );
   }
-  const result = pick ? await pick(names) : { problem: "unsupported" };
-  if (result.problem === "unsupported") {
-    return fail(
-      "This version of Claude Desktop cannot show the environment picker (MCP elicitation). Tell the user to " +
-        "update Claude Desktop to the latest version; until then the OGSM.online tools cannot be used."
-    );
+  const pickerAvailable = Boolean(pick && (canPick ? canPick() : true));
+  if (typed !== undefined) {
+    if (pickerAvailable) {
+      return fail(
+        "Do not pass host: the user chooses the environment in a picker. Call select_environment with only " +
+          "environment_session null."
+      );
+    }
+    return selected(gate.selectTyped(typed));
   }
-  if (result.problem === "failed") {
-    return fail("The environment picker could not be shown. Ask the user to try again, or to update Claude Desktop.");
+  const result = pickerAvailable ? await pick(gate.names()) : { problem: "unsupported" };
+  if (result.problem === "unsupported" || result.problem === "failed") {
+    return ok({ environment: null, [SESSION_PARAM]: null, next_step: ASK_USER });
   }
   if (result.problem) {
     return fail("The user did not choose an environment, so no OGSM.online tool can be used in this conversation.");
   }
-  const { key, environment } = gate.select(result.host);
-  return ok({
-    environment: environment.host,
-    [SESSION_PARAM]: key,
-    note: "Pass this environment_session to every other tool. Work only in this environment for the rest of this conversation.",
-  });
+  return selected(gate.select(result.host));
 }

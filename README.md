@@ -18,9 +18,10 @@ comments and measurements.
    after installing; switch it on under **Settings → Extensions** (called
    **Connectors** in some versions).
 
-The extension needs a recent Claude Desktop that supports MCP *elicitation*
-(the picker in which you choose the environment). With an older version Claude
-tells you to update Claude Desktop first.
+Claude Desktop does not show a picker (MCP form *elicitation*) to local
+extensions. Then Claude asks you in the chat which environment you mean, and you
+type its host, e.g. `klant.ogsm.online` (see below). Where the app can show a
+picker, you choose in the picker instead.
 
 Claude Desktop runs the extension with its built-in Node.js; nothing else needs
 to be installed.
@@ -55,24 +56,34 @@ Fill as many slots as you need and leave the rest empty. Slot 1 is required.
 
 ## One environment per conversation
 
-A conversation is about one environment. At the start, Claude Desktop shows you
-a picker with your configured environments (no default) and you choose one.
-Claude then works in that environment for the whole conversation. To work in
+A conversation is about one environment. At the start, Claude asks you in which
+OGSM.online environment you want to work, and you type its host as you know it
+(e.g. `klant.ogsm.online`; `https://` and a trailing `/` may be included). It
+is only accepted when it matches a configured environment exactly; otherwise
+you are asked to check it, without any configured host being named. Where the
+app supports MCP form elicitation, it shows you a picker with your configured
+environments (no default) instead. Claude then works in the chosen environment
+for the whole conversation. To work in
 another environment, **start a new conversation** (a new chat).
 
 ## Security model
 
-- **You choose the environment, and Claude never sees the others.** The list of
-  configured hosts is only shown to you, in the picker of Claude Desktop itself
-  (MCP elicitation). Claude only learns the environment you chose. There is no
+- **You choose the environment, and Claude never sees the others.** Claude is
+  never given the list of configured hosts: you type the host you mean, or
+  choose it in the app's own picker where there is one (MCP form elicitation).
+  Claude only learns the environment you chose. There is no
   tool that lists environments, and no tool output names another one. This is
   enforced by the extension itself, not only by instructions to Claude:
   - every tool other than `select_environment` refuses to run until an
     environment is selected;
-  - `select_environment` takes no host from Claude; it always asks you, even
-    when only one environment is configured, and never picks one itself. If
-    Claude Desktop cannot show the picker, it refuses and asks you to update
-    Claude Desktop;
+  - `select_environment` always asks you, even when only one environment is
+    configured, and never picks one itself. Without a picker it tells Claude to
+    ask you and to pass on exactly what you typed, without suggesting or
+    guessing a host. A typed host is only accepted on an exact match (ignoring
+    case, `https://` and a trailing `/`); the refusal names no configured host,
+    and after 5 misses in 10 minutes further attempts are refused for a while,
+    so the configured hosts cannot be probed. With a picker, a host from Claude
+    is refused;
   - `select_environment` hands out a random `environment_session` that is bound
     to the chosen environment and that every other tool must pass. It only
     exists in the conversation where you made the choice, so a new conversation
@@ -147,9 +158,10 @@ metingen.
    installeren uitgeschakeld laten; zet haar aan via **Instellingen →
    Extensies** (in sommige versies **Connectors**).
 
-De extensie heeft een recente Claude Desktop nodig die MCP-*elicitation*
-ondersteunt (de keuzelijst waarin je de omgeving kiest). Met een oudere versie
-vraagt Claude je eerst Claude Desktop bij te werken.
+Claude Desktop toont lokale extensies geen keuzelijst (MCP-formulier-
+*elicitation*). Dan vraagt Claude je in de chat welke omgeving je bedoelt, en
+typ je de host, bijvoorbeeld `klant.ogsm.online` (zie hieronder). Waar de app
+wel een keuzelijst kan tonen, kies je in die keuzelijst.
 
 Claude Desktop draait de extensie met de ingebouwde Node.js; je hoeft verder
 niets te installeren.
@@ -184,25 +196,37 @@ Vul zoveel plekken in als je nodig hebt en laat de rest leeg. Plek 1 is verplich
 
 ### Eén omgeving per gesprek
 
-Een gesprek gaat over één omgeving. Aan het begin toont Claude Desktop je een
-keuzelijst met je ingestelde omgevingen (zonder standaardwaarde) en kies je er
-één. Claude werkt daarna het hele gesprek in die omgeving. Wil je in een andere
+Een gesprek gaat over één omgeving. Aan het begin vraagt Claude in welke
+OGSM.online-omgeving je wilt werken, en typ je de host zoals jij die kent
+(bijvoorbeeld `klant.ogsm.online`; `https://` en een `/` aan het eind mogen
+erbij). Die wordt alleen geaccepteerd als hij precies overeenkomt met een
+ingestelde omgeving; anders word je gevraagd hem te controleren, zonder dat er
+een ingestelde host genoemd wordt. Ondersteunt de app MCP-formulier-elicitation,
+dan toont die je in plaats daarvan een keuzelijst met je ingestelde omgevingen
+(zonder standaardwaarde). Claude werkt daarna het hele gesprek in de gekozen
+omgeving. Wil je in een andere
 omgeving werken, **begin dan een nieuw gesprek** (een nieuwe chat).
 
 ### Beveiliging
 
-- **Jij kiest de omgeving, en Claude ziet de andere niet.** De lijst met
-  ingestelde hosts zie alleen jij, in de keuzelijst van Claude Desktop zelf
-  (MCP-elicitation). Claude krijgt alleen de omgeving te horen die jij koos. Er
+- **Jij kiest de omgeving, en Claude ziet de andere niet.** Claude krijgt de
+  lijst met ingestelde hosts nooit: jij typt de host die je bedoelt, of kiest
+  hem in de eigen keuzelijst van de app als die er is (MCP-formulier-
+  elicitation). Claude krijgt alleen de omgeving te horen die jij koos. Er
   is geen tool die omgevingen opsomt, en geen uitvoer van een tool noemt een
   andere omgeving. De extensie dwingt dat zelf af, niet alleen via instructies
   aan Claude:
   - elke tool behalve `select_environment` weigert totdat er een omgeving is
     gekozen;
-  - `select_environment` krijgt geen host van Claude; het vraagt het altijd aan
-    jou, ook als er maar één omgeving is ingesteld, en kiest nooit zelf. Kan
-    Claude Desktop de keuzelijst niet tonen, dan weigert het en vraagt het je
-    Claude Desktop bij te werken;
+  - `select_environment` vraagt het altijd aan jou, ook als er maar één
+    omgeving is ingesteld, en kiest nooit zelf. Zonder keuzelijst zegt het
+    Claude dat het jou moet vragen en precies moet doorgeven wat jij typte,
+    zonder een host voor te stellen of te raden. Een getypte host wordt alleen
+    geaccepteerd als hij precies overeenkomt (hoofdletters, `https://` en een
+    `/` aan het eind tellen niet mee); de weigering noemt geen ingestelde host,
+    en na 5 missers in 10 minuten worden verdere pogingen een tijd geweigerd,
+    zodat de ingestelde hosts niet af te tasten zijn. Met een keuzelijst wordt
+    een host van Claude geweigerd;
   - `select_environment` geeft een willekeurige `environment_session` die aan
     de gekozen omgeving vastzit en die elke andere tool moet meegeven. Die
     bestaat alleen in het gesprek waarin je de keuze maakte, dus in een nieuw
